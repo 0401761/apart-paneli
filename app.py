@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- MODERN CSS TASARIMI ---
+# --- MODERN BALON / PILL CSS TASARIMI ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -130,16 +130,22 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- TURSO HTTP PIPELINE MOTORU (SIFIR WEBSOCKET HATASI) ---
+# --- HIZLANDIRILMIŞ TURSO BAĞLANTISI (SESSION VE BATCH ENGINE) ---
 TURSO_URL = st.secrets["TURSO_URL"].replace("libsql://", "https://")
 TURSO_TOKEN = st.secrets["TURSO_TOKEN"]
 
-def turso_execute(sql, params=None):
-    url = f"{TURSO_URL}/v2/pipeline"
-    headers = {
+@st.cache_resource
+def get_http_session():
+    s = requests.Session()
+    s.headers.update({
         "Authorization": f"Bearer {TURSO_TOKEN}",
         "Content-Type": "application/json"
-    }
+    })
+    return s
+
+def turso_execute(sql, params=None):
+    session = get_http_session()
+    url = f"{TURSO_URL}/v2/pipeline"
     
     stmt = {"sql": sql}
     if params:
@@ -160,9 +166,9 @@ def turso_execute(sql, params=None):
         ]
     }
     
-    resp = requests.post(url, headers=headers, json=payload)
+    resp = session.post(url, json=payload, timeout=8)
     if not resp.ok:
-        raise Exception(f"Turso API Hatası: {resp.text}")
+        raise Exception(f"Turso Hatası: {resp.text}")
         
     data = resp.json()
     result = data["results"][0]
@@ -173,9 +179,7 @@ def turso_execute(sql, params=None):
     cols = [c["name"] for c in resp_obj.get("cols", [])]
     rows = []
     for r in resp_obj.get("rows", []):
-        row_vals = []
-        for val in r:
-            row_vals.append(val.get("value") if val.get("type") != "null" else None)
+        row_vals = [v.get("value") if v.get("type") != "null" else None for v in r]
         rows.append(row_vals)
     return cols, rows
 
@@ -251,7 +255,7 @@ def get_apart_adi():
 
 apart_baslik = get_apart_adi()
 
-# --- SIDEBAR ---
+# --- SIDEBAR (NAVİGASYON & TARİH GEZGİNİ) ---
 with st.sidebar:
     st.markdown(f"## 🏢 {apart_baslik}")
     st.caption("Bulut Destekli Apart Portalı")
@@ -352,7 +356,7 @@ if menu == "🏢 Kat Planı & Durum":
                         </div>
                         <div style="margin-top:10px; font-size:13px; color:#cbd5e1; line-height:1.6;">
                             👥 Kapasite: <b>{oda['kapasite']} Kişilik</b><br>
-                            💵 Gecelik: <b>{oda['fiyat']:,.0f} TL</b><br>
+                            💵 Gecelik: <b>{float(oda['fiyat']):,.0f} TL</b><br>
                             ✨ Müsait ve Hazır
                         </div>
                     </div>
@@ -390,7 +394,7 @@ elif menu == "✨ Yeni Rezervasyon":
         """, [g_str, c_str])
 
         if musaitler:
-            secenekler = {f"{r[1]} ({r[2]} - {r[3]} Kişi - {r[4]:,.0f} TL/gece)": r for r in musaitler}
+            secenekler = {f"{r[1]} ({r[2]} - {r[3]} Kişi - {float(r[4]):,.0f} TL/gece)": r for r in musaitler}
             secilen_etiket = st.selectbox("TAHSİS EDİLECEK MÜSAİT DAİRE *", options=list(secenekler.keys()))
             secilen_oda_data = secenekler[secilen_etiket]
             secilen_id = secilen_oda_data[0]
@@ -462,11 +466,11 @@ elif menu == "✨ Yeni Rezervasyon":
             st.warning("⚠️ Bu tarihlerde tüm daireler doludur.")
 
 # ==========================================
-# 3. AYLIK DOLULUK TAKVİMİ
+# 3. AYLIK DOLULUK TAKVİMİ (HIZLANDIRILMIŞ)
 # ==========================================
 elif menu == "📅 Aylık Doluluk Takvimi":
     st.markdown("## 📅 Aylık Doluluk Takvimi")
-    st.caption("Aylar arasında gezinin, tüm ayı eksiksiz inceleyin.")
+    st.caption("Seçilen ayın doluluk durumunu anında görüntüleyin.")
 
     aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
     ay_col1, ay_col2 = st.columns(2)
