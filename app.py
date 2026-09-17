@@ -31,7 +31,7 @@ st.markdown("""
         border-right: 1px solid rgba(255, 255, 255, 0.08);
     }
 
-    /* Balon Pill Navigasyon Butonları */
+    /* Balon Pill Butonlar */
     div[data-testid="stRadio"] > div {
         display: flex;
         flex-direction: column;
@@ -71,7 +71,6 @@ st.markdown("""
         font-weight: 700 !important;
     }
 
-    /* Metrik Kartları */
     .stat-box {
         background: linear-gradient(145deg, #1e293b, #0f172a);
         border: 1px solid rgba(255, 255, 255, 0.08);
@@ -95,7 +94,6 @@ st.markdown("""
         margin-top: 4px;
     }
 
-    /* Daire Kartları */
     .room-card {
         border-radius: 18px;
         padding: 16px 18px;
@@ -138,7 +136,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- HIZLANDIRILMIŞ TURSO HTTP BAĞLANTISI ---
+# --- TURSO HTTP BAĞLANTISI ---
 TURSO_URL = st.secrets["TURSO_URL"].replace("libsql://", "https://")
 TURSO_TOKEN = st.secrets["TURSO_TOKEN"]
 
@@ -246,14 +244,12 @@ def init_db():
         )
     """)
 
-    # Göç kontrolü (temizlik sütunu eksikse ekle)
     try:
         turso_execute("ALTER TABLE odalar ADD COLUMN temizlik_durumu TEXT DEFAULT 'Temiz'")
     except Exception:
         pass
 
-    # Varsayılan Ayarlar
-    turso_execute("INSERT OR IGNORE INTO ayarlar (anahtar, deger) VALUES ('apart_adi', 'LUX APART')")
+    turso_execute("INSERT OR IGNORE INTO ayarlar (anahtar, deger) VALUES ('apart_adi', 'EDA BUTİK APART')")
     turso_execute("INSERT OR IGNORE INTO ayarlar (anahtar, deger) VALUES ('wifi_adi', 'Apart_Misafir')")
     turso_execute("INSERT OR IGNORE INTO ayarlar (anahtar, deger) VALUES ('wifi_sifre', '12345678')")
     turso_execute("INSERT OR IGNORE INTO ayarlar (anahtar, deger) VALUES ('konum_linki', 'https://maps.google.com')")
@@ -282,7 +278,7 @@ def get_ayar(anahtar, varsayilan=""):
         return rows[0][0]
     return varsayilan
 
-apart_baslik = get_ayar('apart_adi', 'LUX APART')
+apart_baslik = get_ayar('apart_adi', 'EDA BUTİK APART')
 wifi_adi = get_ayar('wifi_adi', 'Apart_Misafir')
 wifi_sifre = get_ayar('wifi_sifre', '12345678')
 konum_linki = get_ayar('konum_linki', 'https://maps.google.com')
@@ -290,7 +286,7 @@ konum_linki = get_ayar('konum_linki', 'https://maps.google.com')
 # --- SIDEBAR ---
 with st.sidebar:
     st.markdown(f"## 🏢 {apart_baslik}")
-    st.caption("Akıllı Apart Yönetim Portalı")
+    st.caption("Yönetim Portalı")
     st.markdown("---")
     
     menu = st.radio(
@@ -492,7 +488,7 @@ elif menu == "✨ Yeni Rezervasyon":
                         st.balloons()
                         st.rerun()
 
-            # Kayıt Sonrası Çift WhatsApp Butonu
+            # WhatsApp Mesaj Formatı (Bozulmayan Temiz URL ve WhatsApp Kalın Yazı Stili)
             if "son_rez" in st.session_state:
                 sr = st.session_state["son_rez"]
                 clean_tel = "".join(filter(str.isdigit, sr['tel']))
@@ -501,32 +497,30 @@ elif menu == "✨ Yeni Rezervasyon":
                 elif not clean_tel.startswith("90") and len(clean_tel) == 10:
                     clean_tel = "90" + clean_tel
 
-                # Mesaj 1: Onay
                 onay_msg = (
-                    f"Sayın {sr['misafir']},\n\n"
-                    f"{apart_baslik} bünyesinde {sr['oda']} için rezervasyonunuz onaylanmıştır.\n"
-                    f"📅 Giriş: {sr['giris']}\n"
-                    f"📅 Çıkış: {sr['cikis']}\n"
-                    f"💰 Kalan Ödeme: {sr['kalan']:,.0f} TL\n\n"
-                    f"Giriş günü görüşmek üzere, iyi yolculuklar dileriz!"
+                    f"Sayın *{sr['misafir']}*,\n\n"
+                    f"*{apart_baslik}* bünyesinde *{sr['oda']}* için rezervasyonunuz başarıyla onaylanmıştır.\n\n"
+                    f"• *Giriş Tarihi:* {sr['giris']}\n"
+                    f"• *Çıkış Tarihi:* {sr['cikis']}\n"
+                    f"• *Girişte Kalan Ödeme:* {sr['kalan']:,.0f} TL\n\n"
+                    f"Giriş günü sizleri ağırlamaktan mutluluk duyacağız. Şimdiden iyi yolculuklar dileriz!"
                 )
-                wa_onay_url = f"https://wa.me/{clean_tel}?text={urllib.parse.quote(onay_msg)}"
+                wa_onay_url = f"https://api.whatsapp.com/send?phone={clean_tel}&text={urllib.parse.quote(onay_msg.encode('utf-8'))}"
 
-                # Mesaj 2: Konum & Wi-Fi
                 bilgi_msg = (
-                    f"Sayın {sr['misafir']},\n\n"
-                    f"{apart_baslik} konaklamanız için pratik bilgiler:\n"
-                    f"📍 Google Maps Konumumuz: {konum_linki}\n"
-                    f"📶 Wi-Fi Ağı: {wifi_adi}\n"
-                    f"🔑 Wi-Fi Şifresi: {wifi_sifre}\n"
-                    f"🕒 Giriş Saati: 14:00 | Çıkış Saati: 11:00\n\n"
-                    f"İyi tatiller dileriz!"
+                    f"Sayın *{sr['misafir']}*,\n\n"
+                    f"*{apart_baslik}* konaklamanız için pratik bilgiler:\n\n"
+                    f"📍 *Google Harita Konumumuz:*\n{konum_linki}\n\n"
+                    f"📶 *Misafir Wi-Fi:* {wifi_adi}\n"
+                    f"🔑 *Wi-Fi Şifresi:* {wifi_sifre}\n"
+                    f"⏰ *Giriş Saati:* 14:00 | *Çıkış Saati:* 11:00\n\n"
+                    f"Konaklamanız süresince her türlü ihtiyacınızda bize bu hattan ulaşabilirsiniz. İyi tatiller!"
                 )
-                wa_bilgi_url = f"https://wa.me/{clean_tel}?text={urllib.parse.quote(bilgi_msg)}"
+                wa_bilgi_url = f"https://api.whatsapp.com/send?phone={clean_tel}&text={urllib.parse.quote(bilgi_msg.encode('utf-8'))}"
 
                 st.markdown(f"""
                 <div style="background: rgba(34, 197, 94, 0.12); border: 1px solid #22c55e; padding: 16px; border-radius: 14px; margin-top: 15px;">
-                    <b>📲 Misafire WhatsApp'tan Hızlı Bilgi Gönderin ({sr['misafir']})</b>
+                    <b>📲 Misafire WhatsApp'tan Bilgi Gönderin ({sr['misafir']})</b>
                     <div style="display:flex; gap:12px; margin-top:10px;">
                         <a href="{wa_onay_url}" target="_blank" style="background:#22c55e; color:white; padding:9px 16px; border-radius:8px; text-decoration:none; font-weight:700;">✅ 1. Rezervasyon Onayı Gönder</a>
                         <a href="{wa_bilgi_url}" target="_blank" style="background:#0284c7; color:white; padding:9px 16px; border-radius:8px; text-decoration:none; font-weight:700;">📍 2. Konum & Wi-Fi Kartı Gönder</a>
@@ -589,7 +583,6 @@ elif menu == "💳 Kasa & Parçalı Tahsilat":
         ORDER BY r.giris_tarihi ASC
     """)
 
-    # Tahsilat yöntemleri kırılımı
     tahsilat_df = query_df("SELECT * FROM tahsilatlar")
     nakit_toplam = tahsilat_df[tahsilat_df['yontem'].str.contains('Nakit', case=False, na=False)]['tutar'].astype(float).sum() if not tahsilat_df.empty else 0.0
     havale_toplam = tahsilat_df[tahsilat_df['yontem'].str.contains('Havale', case=False, na=False)]['tutar'].astype(float).sum() if not tahsilat_df.empty else 0.0
@@ -633,7 +626,6 @@ elif menu == "💳 Kasa & Parçalı Tahsilat":
 
         tah_c1, tah_c2, tah_c3 = st.columns(3, gap="medium")
 
-        # 1. Kolon: Ara Ödeme / Tahsilat Ekle
         with tah_c1:
             st.markdown("#### 💵 Ara Ödeme / Tahsilat Al")
             secilen_tah_id = st.selectbox(
@@ -652,14 +644,12 @@ elif menu == "💳 Kasa & Parçalı Tahsilat":
                         VALUES (?, ?, ?, ?)
                     """, [secilen_tah_id, eklenen_tutar, eklenen_yontem, date.today().strftime("%Y-%m-%d")])
                     
-                    # Rezervasyon ödenen tutarını artır
                     turso_execute("""
                         UPDATE rezervasyonlar SET alinan_kapora = alinan_kapora + ? WHERE id = ?
                     """, [eklenen_tutar, secilen_tah_id])
                     st.success("Ödeme işlendi!")
                     st.rerun()
 
-        # 2. Kolon: Bilgi Düzelt
         with tah_c2:
             st.markdown("#### ✏️ Bilgileri Düzenle")
             secilen_duzenle_id = st.selectbox(
@@ -686,7 +676,6 @@ elif menu == "💳 Kasa & Parçalı Tahsilat":
                     st.success("Güncellendi!")
                     st.rerun()
 
-        # 3. Kolon: Çıkış & İptal
         with tah_c3:
             st.markdown("#### 🚪 Çıkış & Oda Boşaltma")
             secilen_islem_id = st.selectbox(
@@ -699,9 +688,7 @@ elif menu == "💳 Kasa & Parçalı Tahsilat":
             secili_oda_id = int(df[df['id'] == secilen_islem_id]['oda_id'].values[0])
 
             if st.button("✅ Çıkış Yap (Odayı Kirli Yap & Arşivle)", use_container_width=True):
-                # Rezervasyonu tamamla
                 turso_execute("UPDATE rezervasyonlar SET durum = 'Tamamlandı' WHERE id = ?", [secilen_islem_id])
-                # Odayı temizlik bekliyor (Kirli) statüsüne al
                 turso_execute("UPDATE odalar SET temizlik_durumu = 'Kirli' WHERE id = ?", [secili_oda_id])
                 st.success("Çıkış yapıldı! Oda 'Temizlik Bekliyor' olarak işaretlendi.")
                 st.rerun()
@@ -718,7 +705,7 @@ elif menu == "💳 Kasa & Parçalı Tahsilat":
 # ==========================================
 elif menu == "📋 Günlük KBS & Girişler":
     st.markdown("## 📋 Günlük KBS (Kimlik Bildirim) & Giriş Listesi")
-    st.caption("Emniyet / Jandarma KBS sistemine bildirim yaparken tek tek uğraşmayın, buradan kopyalayın.")
+    st.caption("Emniyet / Jandarma KBS bildirimleri için pratik liste.")
 
     kbs_df = query_df("""
         SELECT o.oda_adi, r.misafir_adi, r.tc_pasaport, r.plaka, r.telefon, r.giris_tarihi, r.cikis_tarihi
@@ -740,7 +727,6 @@ elif menu == "📋 Günlük KBS & Girişler":
             'cikis_tarihi': 'ÇIKIŞ'
         }), use_container_width=True, hide_index=True)
 
-        # Tek tuşla kopyalama paneli
         kbs_metin = ""
         for _, r in kbs_df.iterrows():
             kbs_metin += f"Daire: {r['oda_adi']} | Ad Soyad: {r['misafir_adi']} | TC: {r['tc_pasaport']} | Plaka: {r['plaka']} | Tel: {r['telefon']}\n"
