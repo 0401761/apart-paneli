@@ -6,13 +6,13 @@ import calendar
 
 # --- SAYFA YAPILANDIRMASI ---
 st.set_page_config(
-    page_title="Apart Otel Yönetim Portalı",
-    page_icon="✨",
+    page_title="Apart Yönetim Portalı",
+    page_icon="🏢",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# --- GELİŞMİŞ CSS & ULTRA MODERN ARAYÜZ ---
+# --- MODERN BALON / PILL CSS TASARIMI ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -21,144 +21,119 @@ st.markdown("""
         font-family: 'Plus Jakarta Sans', sans-serif;
     }
 
-    /* Arka Plan & Sidebar Yumuşatma */
     .stApp {
-        background-color: #0b0f19;
-    }
-    
-    section[data-testid="stSidebar"] {
-        background-color: #111827;
-        border-right: 1px solid rgba(255, 255, 255, 0.06);
+        background-color: #090d16;
     }
 
-    /* Modern İstatistik Kartları */
-    .stat-card {
-        background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%);
-        backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 16px;
-        padding: 20px;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
-        position: relative;
-        overflow: hidden;
+    section[data-testid="stSidebar"] {
+        background-color: #0f172a;
+        border-right: 1px solid rgba(255, 255, 255, 0.08);
     }
-    
-    .stat-card::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 3px;
-        background: linear-gradient(90deg, #38bdf8, #818cf8);
+
+    /* Modern Balon / Pill Navigasyon Butonları */
+    div[data-testid="stRadio"] > div {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    div[data-testid="stRadio"] label {
+        background: rgba(30, 41, 59, 0.6) !important;
+        border: 1px solid rgba(255, 255, 255, 0.07) !important;
+        padding: 12px 18px !important;
+        border-radius: 50px !important; /* Balon hap stili */
+        cursor: pointer !important;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        margin: 0 !important;
+    }
+
+    div[data-testid="stRadio"] label:hover {
+        background: rgba(56, 189, 248, 0.15) !important;
+        border-color: rgba(56, 189, 248, 0.4) !important;
+        transform: translateX(4px);
+    }
+
+    /* Seçili Radyo Butonu Gizle ve Arka Planını Parla */
+    div[data-testid="stRadio"] label div:first-child {
+        display: none !important;
+    }
+
+    div[data-testid="stRadio"] label[data-checked="true"],
+    div[data-testid="stRadio"] label:has(input:checked) {
+        background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%) !important;
+        border-color: #38bdf8 !important;
+        box-shadow: 0 4px 20px rgba(37, 99, 235, 0.45) !important;
+    }
+
+    div[data-testid="stRadio"] label[data-checked="true"] p,
+    div[data-testid="stRadio"] label:has(input:checked) p {
+        color: #ffffff !important;
+        font-weight: 700 !important;
+    }
+
+    /* İstatistik Kartları */
+    .stat-box {
+        background: linear-gradient(145deg, #1e293b, #0f172a);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 20px;
+        padding: 22px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.4);
     }
 
     .stat-label {
         font-size: 12px;
-        font-weight: 700;
         color: #94a3b8;
+        font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 1px;
+        letter-spacing: 0.8px;
     }
 
-    .stat-num {
+    .stat-val {
         font-size: 32px;
         font-weight: 800;
-        color: #ffffff;
+        color: #f8fafc;
         margin-top: 6px;
     }
 
-    /* Kat Başlıkları */
-    .floor-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        background: rgba(56, 189, 248, 0.12);
-        border: 1px solid rgba(56, 189, 248, 0.3);
-        color: #38bdf8;
-        font-size: 14px;
-        font-weight: 700;
-        padding: 6px 14px;
-        border-radius: 30px;
-        margin: 20px 0 12px 0;
-    }
-
-    /* Daire Kutuları */
+    /* Daire Kartları */
     .room-card {
-        border-radius: 16px;
-        padding: 18px;
-        margin-bottom: 12px;
+        border-radius: 18px;
+        padding: 18px 20px;
+        margin-bottom: 14px;
         border: 1px solid;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-    }
-    
-    .room-card:hover {
-        transform: translateY(-3px);
+        box-shadow: 0 6px 16px rgba(0,0,0,0.25);
     }
 
-    .room-card.empty {
-        background: linear-gradient(145deg, rgba(16, 185, 129, 0.1), rgba(6, 78, 59, 0.2));
-        border-color: rgba(16, 185, 129, 0.3);
+    .room-free {
+        background: linear-gradient(145deg, rgba(16, 185, 129, 0.12), rgba(6, 78, 59, 0.25));
+        border-color: rgba(16, 185, 129, 0.4);
     }
 
-    .room-card.full {
-        background: linear-gradient(145deg, rgba(239, 68, 68, 0.1), rgba(127, 29, 29, 0.25));
-        border-color: rgba(239, 68, 68, 0.3);
+    .room-busy {
+        background: linear-gradient(145deg, rgba(239, 68, 68, 0.12), rgba(127, 29, 29, 0.3));
+        border-color: rgba(239, 68, 68, 0.4);
     }
 
-    .room-title {
-        font-size: 17px;
-        font-weight: 700;
-        color: #f8fafc;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-
-    .badge-status {
+    .pill-badge {
         font-size: 11px;
         font-weight: 800;
-        padding: 4px 10px;
-        border-radius: 20px;
-        letter-spacing: 0.5px;
-    }
-    
-    .badge-empty {
-        background: #10b981;
-        color: #022c22;
-    }
-    
-    .badge-full {
-        background: #ef4444;
-        color: #ffffff;
+        padding: 4px 12px;
+        border-radius: 30px;
     }
 
-    .room-info {
-        font-size: 13px;
-        color: #cbd5e1;
-        margin-top: 10px;
-        line-height: 1.6;
-    }
+    .pill-free { background: #10b981; color: #022c22; }
+    .pill-busy { background: #ef4444; color: #ffffff; }
 
-    /* Form ve Buton İyileştirmeleri */
+    /* Butonlar */
     div.stButton > button {
-        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 12px !important;
+        border-radius: 14px !important;
         font-weight: 700 !important;
-        padding: 12px 24px !important;
-        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35) !important;
-    }
-
-    div.stButton > button:hover {
-        transform: scale(1.02);
+        padding: 10px 20px !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- VERİTABANI İŞLEMLERİ ---
+# --- VERİTABANI VE AYARLAR ---
 DB_NAME = "apart_yonetim.db"
 
 def get_db():
@@ -168,9 +143,15 @@ def init_db():
     with get_db() as conn:
         c = conn.cursor()
         c.execute("""
+            CREATE TABLE IF NOT EXISTS ayarlar (
+                anahtar TEXT PRIMARY KEY,
+                deger TEXT
+            )
+        """)
+        c.execute("""
             CREATE TABLE IF NOT EXISTS odalar (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                oda_adi TEXT UNIQUE NOT NULL,
+                oda_adi TEXT NOT NULL,
                 kat TEXT NOT NULL,
                 kapasite INTEGER DEFAULT 3
             )
@@ -189,6 +170,11 @@ def init_db():
                 FOREIGN KEY (oda_id) REFERENCES odalar (id)
             )
         """)
+        
+        # Varsayılan apart ismi
+        c.execute("INSERT OR IGNORE INTO ayarlar (anahtar, deger) VALUES ('apart_adi', 'LUX APART')")
+
+        # 9 Daireyi yükle (Yoksa)
         c.execute("SELECT COUNT(*) FROM odalar")
         if c.fetchone()[0] == 0:
             varsayilan = [
@@ -207,34 +193,47 @@ def init_db():
 
 init_db()
 
-bugun = date.today()
-bugun_str = bugun.strftime("%Y-%m-%d")
+def get_apart_adi():
+    with get_db() as conn:
+        c = conn.cursor()
+        c.execute("SELECT deger FROM ayarlar WHERE anahtar = 'apart_adi'")
+        res = c.fetchone()
+        return res[0] if res else "APART YÖNETİM"
 
-# --- MENÜ ---
+# --- SIDEBAR (NAVİGASYON & TARİH GEZGİNİ) ---
+apart_baslik = get_apart_adi()
+
 with st.sidebar:
-    st.markdown("## 🏨 LUX APART")
-    st.caption("Yönetim & Misafir Takip Portalı")
+    st.markdown(f"## 🏢 {apart_baslik}")
+    st.caption("Apart Yönetim & Takip Sistemi")
+    st.markdown("---")
     
     menu = st.radio(
-        "Gezinme Menüsü",
+        "Menü",
         [
             "🏢 Kat Planı & Durum",
             "✨ Yeni Rezervasyon",
             "📅 Aylık Doluluk Takvimi",
             "💳 Kasa & Bakiyeler",
             "📁 Rezervasyon Arşivi",
-            "⚙️ Daire Ayarları & Düzenleme"
-        ]
+            "⚙️ Daire & Apart Ayarları"
+        ],
+        label_visibility="collapsed"
     )
+
     st.markdown("---")
-    st.markdown(f"🗓️ **Bugünün Tarihi:** `{bugun.strftime('%d.%m.%Y')}`")
+    st.markdown("#### 🗓️ Gözlem Tarihi")
+    st.caption("Farklı tarihlerdeki doluluk durumuna anında bakın:")
+    secilen_tarih = st.date_input("İncelenen Tarih", value=date.today())
+    secilen_tarih_str = secilen_tarih.strftime("%Y-%m-%d")
 
 # ==========================================
 # 1. KAT PLANI & CANLI DURUM
 # ==========================================
 if menu == "🏢 Kat Planı & Durum":
-    st.markdown("## 🏢 Bina Kat Planı ve Anlık Durum")
-    
+    st.markdown(f"## 🏢 {apart_baslik} - Kat Planı ve Doluluk")
+    st.caption(f"İncelenen Tarih: **{secilen_tarih.strftime('%d.%m.%Y')}**")
+
     with get_db() as conn:
         c = conn.cursor()
         c.execute("SELECT id, oda_adi, kat, kapasite FROM odalar ORDER BY id ASC")
@@ -248,10 +247,10 @@ if menu == "🏢 Kat Planı & Durum":
         """, conn)
 
     if not rez_df.empty:
-        su_an_dolu = rez_df[(rez_df['giris_tarihi'] <= bugun_str) & (rez_df['cikis_tarihi'] > bugun_str)]
+        su_an_dolu = rez_df[(rez_df['giris_tarihi'] <= secilen_tarih_str) & (rez_df['cikis_tarihi'] > secilen_tarih_str)]
         dolu_odalar = {row['oda_id']: row for _, row in su_an_dolu.iterrows()}
-        girisler = rez_df[rez_df['giris_tarihi'] == bugun_str]
-        cikislar = rez_df[rez_df['cikis_tarihi'] == bugun_str]
+        girisler = rez_df[rez_df['giris_tarihi'] == secilen_tarih_str]
+        cikislar = rez_df[rez_df['cikis_tarihi'] == secilen_tarih_str]
     else:
         dolu_odalar = {}
         girisler = pd.DataFrame()
@@ -261,55 +260,51 @@ if menu == "🏢 Kat Planı & Durum":
     dolu_sayisi = len(dolu_odalar)
     bos_sayisi = toplam_daire - dolu_sayisi
 
-    # Metrik Kartları
-    c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(f'<div class="stat-card"><div class="stat-label">Toplam Daire</div><div class="stat-num">{toplam_daire}</div></div>', unsafe_allow_html=True)
-    c2.markdown(f'<div class="stat-card"><div class="stat-label">Müsait Daire</div><div class="stat-num" style="color:#10b981;">{bos_sayisi}</div></div>', unsafe_allow_html=True)
-    c3.markdown(f'<div class="stat-card"><div class="stat-label">Bugün Giriş</div><div class="stat-num" style="color:#38bdf8;">{len(girisler)}</div></div>', unsafe_allow_html=True)
-    c4.markdown(f'<div class="stat-card"><div class="stat-label">Bugün Çıkış</div><div class="stat-num" style="color:#f59e0b;">{len(cikislar)}</div></div>', unsafe_allow_html=True)
+    col1, col2, col3, col4 = st.columns(4)
+    col1.markdown(f'<div class="stat-box"><div class="stat-label">Toplam Daire</div><div class="stat-val">{toplam_daire}</div></div>', unsafe_allow_html=True)
+    col2.markdown(f'<div class="stat-box"><div class="stat-label">Müsait Daire</div><div class="stat-val" style="color:#10b981;">{bos_sayisi}</div></div>', unsafe_allow_html=True)
+    col3.markdown(f'<div class="stat-box"><div class="stat-label">O Gün Girişler</div><div class="stat-val" style="color:#38bdf8;">{len(girisler)}</div></div>', unsafe_allow_html=True)
+    col4.markdown(f'<div class="stat-box"><div class="stat-label">O Gün Çıkışlar</div><div class="stat-val" style="color:#f59e0b;">{len(cikislar)}</div></div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Kat Hiyerarşisi
     kat_sirasi = ["Çatı Katı", "3. Kat", "2. Kat", "1. Kat", "Zemin Kat"]
     for kat in kat_sirasi:
         kat_odalari = [o for o in tum_odalar if o["kat"] == kat]
         if not kat_odalari:
             continue
             
-        st.markdown(f'<div class="floor-badge">📍 {kat.upper()}</div>', unsafe_allow_html=True)
+        st.markdown(f"#### 📍 {kat.upper()}")
         cols = st.columns(len(kat_odalari))
-        
         for idx, oda in enumerate(kat_odalari):
             with cols[idx]:
                 if oda["id"] in dolu_odalar:
                     rez = dolu_odalar[oda["id"]]
                     kalan = rez['toplam_ucret'] - rez['alinan_kapora']
                     st.markdown(f"""
-                    <div class="room-card full">
-                        <div class="room-title">
-                            <span>{oda['oda_adi']}</span>
-                            <span class="badge-status badge-full">DOLU</span>
+                    <div class="room-card room-busy">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <b style="font-size:17px; color:#fff;">{oda['oda_adi']}</b>
+                            <span class="pill-badge pill-busy">DOLU</span>
                         </div>
-                        <div class="room-info">
+                        <div style="margin-top:10px; font-size:13px; color:#cbd5e1; line-height:1.6;">
                             👤 <b>{rez['misafir_adi'].upper()}</b><br>
-                            📞 <code>{rez['telefon'] or 'Belirtilmedi'}</code><br>
-                            🗓️ Çıkış: <b>{rez['cikis_tarihi']}</b><br>
-                            💰 Kalan Bakiye: <b style="color:#ef4444;">{kalan:,.0f} TL</b>
+                            📞 <code>{rez['telefon'] or 'Yok'}</code><br>
+                            📅 Çıkış: <b>{rez['cikis_tarihi']}</b><br>
+                            💰 Kalan: <b style="color:#ef4444;">{kalan:,.0f} TL</b>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
                 else:
                     st.markdown(f"""
-                    <div class="room-card empty">
-                        <div class="room-title">
-                            <span>{oda['oda_adi']}</span>
-                            <span class="badge-status badge-empty">MÜSAİT</span>
+                    <div class="room-card room-free">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <b style="font-size:17px; color:#fff;">{oda['oda_adi']}</b>
+                            <span class="pill-badge pill-free">BOŞ</span>
                         </div>
-                        <div class="room-info">
+                        <div style="margin-top:10px; font-size:13px; color:#cbd5e1; line-height:1.6;">
                             👥 Kapasite: <b>{oda['kapasite']} Kişilik</b><br>
-                            ✨ Hazır & Temiz<br>
-                            🌟 Girişe Uygun
+                            ✨ Müsait ve Hazır
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
@@ -320,16 +315,15 @@ if menu == "🏢 Kat Planı & Durum":
 elif menu == "✨ Yeni Rezervasyon":
     st.markdown("## ✨ Yeni Misafir Rezervasyonu")
     
-    col_t1, col_t2 = st.columns(2)
-    with col_t1:
-        giris = st.date_input("🗓️ GİRİŞ TARİHİ", value=bugun, min_value=bugun)
-    with col_t2:
-        cikis = st.date_input("🗓️ ÇIKIŞ TARİHİ", value=bugun + timedelta(days=1), min_value=bugun + timedelta(days=1))
+    t1, t2 = st.columns(2)
+    with t1:
+        giris = st.date_input("🗓️ GİRİŞ TARİHİ", value=date.today())
+    with t2:
+        cikis = st.date_input("🗓️ ÇIKIŞ TARİHİ", value=date.today() + timedelta(days=1))
 
     if cikis <= giris:
         st.error("Çıkış tarihi giriş tarihinden sonra olmalıdır.")
     else:
-        # Müsait odaları bul
         g_str = giris.strftime("%Y-%m-%d")
         c_str = cikis.strftime("%Y-%m-%d")
         with get_db() as conn:
@@ -345,29 +339,28 @@ elif menu == "✨ Yeni Rezervasyon":
             """, (g_str, c_str))
             musaitler = c.fetchall()
 
-        with st.form("rezervasyon_ekle_form"):
-            st.markdown("#### 👤 Misafir ve Ücret Bilgileri")
+        with st.form("yeni_rez_form"):
             f1, f2 = st.columns(2)
             with f1:
-                misafir = st.text_input("MİSAFİR ADI SOYADI *", placeholder="Örn: Mehmet Demir")
+                misafir = st.text_input("MİSAFİR ADI SOYADI *", placeholder="Örn: Hasan Yılmaz")
                 telefon = st.text_input("TELEFON NUMARASI", placeholder="05XXXXXXXXX")
             with f2:
-                toplam = st.number_input("TOPLAM KONAKLAMA ÜCRETİ (TL)", min_value=0.0, step=100.0, value=2000.0)
+                toplam = st.number_input("TOPLAM ÜCRET (TL)", min_value=0.0, step=100.0, value=2000.0)
                 kapora = st.number_input("ALINAN KAPORA (TL)", min_value=0.0, step=100.0, value=500.0)
 
-            kalan_para = max(0.0, toplam - kapora)
-            st.info(f"💵 Girişte Tahsil Edilecek Tutar: **{kalan_para:,.2f} TL**")
-            
+            kalan_ucret = max(0.0, toplam - kapora)
+            st.info(f"💵 Tahsil Edilecek Açık Bakiye: **{kalan_ucret:,.2f} TL**")
+
             st.markdown("---")
             if musaitler:
-                secenekler = {f"{r[1]} ({r[2]} - {r[3]} Kişi)": r[0] for r in musaitler}
-                secilen_etiket = st.selectbox("TAHSİS EDİLECEK BOŞ DAİRE *", options=list(secenekler.keys()))
+                secenekler = {f"{r[1]} ({r[2]} - {r[3]} Kişilik)": r[0] for r in musaitler}
+                secilen_etiket = st.selectbox("TAHSİS EDİLECEK DAİRE *", options=list(secenekler.keys()))
                 secilen_id = secenekler[secilen_etiket]
 
                 onayla = st.form_submit_button("🚀 Rezervasyonu Onayla ve Kaydet", use_container_width=True)
                 if onayla:
                     if not misafir.strip():
-                        st.error("Misafir adı zorunludur.")
+                        st.error("Lütfen misafir adını giriniz.")
                     else:
                         with get_db() as conn:
                             conn.execute("""
@@ -375,31 +368,30 @@ elif menu == "✨ Yeni Rezervasyon":
                                 VALUES (?, ?, ?, ?, ?, ?, ?)
                             """, (secilen_id, misafir.strip(), telefon.strip(), g_str, c_str, toplam, kapora))
                             conn.commit()
-                        st.success(f"🎉 {secilen_etiket} için rezervasyon başarıyla tamamlandı!")
+                        st.success(f"🎉 {secilen_etiket} için rezervasyon başarıyla açıldı!")
                         st.balloons()
             else:
-                st.warning("⚠️ Bu tarihlerde müsait daire bulunmamaktadır.")
-                st.form_submit_button("Daire Yok", disabled=True, use_container_width=True)
+                st.warning("⚠️ Bu tarihlerde tüm daireler doludur.")
+                st.form_submit_button("Daire Bulunamadı", disabled=True, use_container_width=True)
 
 # ==========================================
 # 3. AYLIK DOLULUK TAKVİMİ
 # ==========================================
 elif menu == "📅 Aylık Doluluk Takvimi":
     st.markdown("## 📅 Aylık Doluluk Takvimi")
-    st.caption("İstediğiniz ayı seçerek sadece o ayın tam doluluk matrisini inceleyin.")
+    st.caption("Aylar arasında gezinin, hiçbir gün taşmadan tüm ayı inceleyin.")
 
-    ay_isimleri = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
-    t1, t2 = st.columns(2)
-    with t1:
-        secilen_ay_adi = st.selectbox("GÖRÜNTÜLENECEK AY", ay_isimleri, index=bugun.month - 1)
-        secilen_ay = ay_isimleri.index(secilen_ay_adi) + 1
-    with t2:
-        secilen_yil = st.selectbox("GÖRÜNTÜLENECEK YIL", [2025, 2026, 2027], index=1)
+    aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
+    ay_col1, ay_col2 = st.columns(2)
+    with ay_col1:
+        secilen_ay_adi = st.selectbox("AY SEÇİMİ", aylar, index=date.today().month - 1)
+        secilen_ay_num = aylar.index(secilen_ay_adi) + 1
+    with ay_col2:
+        secilen_yil = st.selectbox("YIL SEÇİMİ", [2025, 2026, 2027], index=1)
 
-    # Seçilen ayın gün sayısı
-    toplam_gun = calendar.monthrange(secilen_yil, secilen_ay)[1]
-    gun_listesi = [date(secilen_yil, secilen_ay, d) for d in range(1, toplam_gun + 1)]
-    basliklar = [f"{d.day:02d} {secilen_ay_adi[:3]}" for d in gun_listesi]
+    toplam_gun = calendar.monthrange(secilen_yil, secilen_ay_num)[1]
+    gunler = [date(secilen_yil, secilen_ay_num, d) for d in range(1, toplam_gun + 1)]
+    basliklar = [f"{d.day:02d} {secilen_ay_adi[:3]}" for d in gunler]
 
     with get_db() as conn:
         odalar = conn.execute("SELECT id, oda_adi, kat FROM odalar ORDER BY id ASC").fetchall()
@@ -407,8 +399,8 @@ elif menu == "📅 Aylık Doluluk Takvimi":
 
     matris = []
     for o_id, o_adi, o_kat in odalar:
-        satir = {"DAİRE BİLGİSİ": f"🏠 {o_adi} ({o_kat})"}
-        for g, baslik in zip(gun_listesi, basliklar):
+        satir = {"DAİRE": f"🏠 {o_adi}"}
+        for g, baslik in zip(gunler, basliklar):
             g_str = g.strftime("%Y-%m-%d")
             isim = ""
             for r_oid, r_isim, r_gir, r_cik in rezler:
@@ -418,18 +410,18 @@ elif menu == "📅 Aylık Doluluk Takvimi":
             satir[baslik] = f"🔴 {isim}" if isim else "🟢 Boş"
         matris.append(satir)
 
-    df_aylik = pd.DataFrame(matris).set_index("DAİRE BİLGİSİ")
-    st.dataframe(df_aylik, use_container_width=True)
+    df_ay = pd.DataFrame(matris).set_index("DAİRE")
+    st.dataframe(df_ay, use_container_width=True)
 
 # ==========================================
-# 4. KASA & BAKİYELER
+# 4. KASA, BAKİYELER & DÜZENLEME
 # ==========================================
 elif menu == "💳 Kasa & Bakiyeler":
-    st.markdown("## 💳 Kasa, Tahsilat & Aktif Bakiyeler")
-    
+    st.markdown("## 💳 Kasa, Tahsilat & Rezervasyon Düzenleme")
+
     with get_db() as conn:
         df = pd.read_sql_query("""
-            SELECT r.id, o.oda_adi, r.misafir_adi, r.telefon, r.giris_tarihi, r.cikis_tarihi,
+            SELECT r.id, o.oda_adi, r.oda_id, r.misafir_adi, r.telefon, r.giris_tarihi, r.cikis_tarihi,
                    r.toplam_ucret, r.alinan_kapora, (r.toplam_ucret - r.alinan_kapora) as kalan_bakiye
             FROM rezervasyonlar r
             JOIN odalar o ON r.oda_id = o.id
@@ -443,14 +435,14 @@ elif menu == "💳 Kasa & Bakiyeler":
         kalan = df['kalan_bakiye'].sum()
 
         c1, c2, c3 = st.columns(3)
-        c1.markdown(f'<div class="stat-card"><div class="stat-label">Toplam Sözleşme</div><div class="stat-num">{ciro:,.0f} TL</div></div>', unsafe_allow_html=True)
-        c2.markdown(f'<div class="stat-card"><div class="stat-label">Tahsil Edilen Kapora</div><div class="stat-num" style="color:#10b981;">{tahsilat:,.0f} TL</div></div>', unsafe_allow_html=True)
-        c3.markdown(f'<div class="stat-card"><div class="stat-label">Bekleyen Tahsilat</div><div class="stat-num" style="color:#ef4444;">{kalan:,.0f} TL</div></div>', unsafe_allow_html=True)
+        c1.markdown(f'<div class="stat-box"><div class="stat-label">Toplam Sözleşme</div><div class="stat-val">{ciro:,.0f} TL</div></div>', unsafe_allow_html=True)
+        c2.markdown(f'<div class="stat-box"><div class="stat-label">Tahsil Edilen Kapora</div><div class="stat-val" style="color:#10b981;">{tahsilat:,.0f} TL</div></div>', unsafe_allow_html=True)
+        c3.markdown(f'<div class="stat-box"><div class="stat-label">Bekleyen Tahsilat</div><div class="stat-val" style="color:#ef4444;">{kalan:,.0f} TL</div></div>', unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("#### 📋 Aktif Rezervasyon Listesi")
+        st.markdown("#### 📋 Aktif Rezervasyonlar")
         
-        gosterim_df = df.rename(columns={
+        gosterim = df.rename(columns={
             'oda_adi': 'DAİRE',
             'misafir_adi': 'MİSAFİR ADI SOYADI',
             'telefon': 'TELEFON',
@@ -460,36 +452,70 @@ elif menu == "💳 Kasa & Bakiyeler":
             'alinan_kapora': 'KAPORA (TL)',
             'kalan_bakiye': 'KALAN BAKİYE (TL)'
         })
-        st.dataframe(gosterim_df.drop(columns=['id']), use_container_width=True, hide_index=True)
+        st.dataframe(gosterim.drop(columns=['id', 'oda_id']), use_container_width=True, hide_index=True)
 
         st.markdown("---")
-        st.markdown("#### 🚪 Misafir Çıkışı & Arşive Gönderme")
-        with st.form("cikis_form"):
-            secilen_id = st.selectbox(
-                "ÇIKIŞI YAPILACAK MİSAFİRİ SEÇİN:",
+
+        # İki Sütunlu Operasyon: Düzenle & Çıkış Yap
+        op1, op2 = st.columns(2, gap="large")
+
+        with op1:
+            st.markdown("#### ✏️ Rezervasyon Bilgisini Düzelt")
+            st.caption("İsim, telefon veya ücret yanlış girildiyse buradan düzeltin:")
+            secilen_duzenle_id = st.selectbox(
+                "DÜZENLENECEK REZERVASYON:",
                 options=df['id'].tolist(),
-                format_func=lambda x: f"{df[df['id']==x]['misafir_adi'].values[0]} | {df[df['id']==x]['oda_adi'].values[0]}"
+                format_func=lambda x: f"{df[df['id']==x]['misafir_adi'].values[0]} ({df[df['id']==x]['oda_adi'].values[0]})"
             )
-            tamamla = st.form_submit_button("✅ Çıkışı Onayla ve Arşive Taşı", use_container_width=True)
-            if tamamla:
-                with get_db() as conn:
-                    conn.execute("UPDATE rezervasyonlar SET durum = 'Tamamlandı' WHERE id = ?", (secilen_id,))
-                    conn.commit()
-                st.success("Misafir çıkışı yapıldı ve arşive aktarıldı!")
-                st.rerun()
+            
+            rez_secili = df[df['id'] == secilen_duzenle_id].iloc[0]
+            
+            with st.form("rez_guncelle_form"):
+                yeni_misafir = st.text_input("Misafir Adı Soyadı", value=rez_secili['misafir_adi'])
+                yeni_tel = st.text_input("Telefon Numarası", value=rez_secili['telefon'])
+                yeni_toplam = st.number_input("Toplam Ücret (TL)", value=float(rez_secili['toplam_ucret']), step=100.0)
+                yeni_kapora = st.number_input("Tahsil Edilen Kapora (TL)", value=float(rez_secili['alinan_kapora']), step=100.0)
+                
+                guncelle_btn = st.form_submit_button("💾 Bilgileri Güncelle")
+                if guncelle_btn:
+                    with get_db() as conn:
+                        conn.execute("""
+                            UPDATE rezervasyonlar 
+                            SET misafir_adi = ?, telefon = ?, toplam_ucret = ?, alinan_kapora = ?
+                            WHERE id = ?
+                        """, (yeni_misafir.strip(), yeni_tel.strip(), yeni_toplam, yeni_kapora, secilen_duzenle_id))
+                        conn.commit()
+                    st.success("Rezervasyon başarıyla güncellendi!")
+                    st.rerun()
+
+        with op2:
+            st.markdown("#### 🚪 Çıkış Onayı & Arşiv")
+            st.caption("Konaklaması biten misafiri arşive gönderin:")
+            secilen_cikis_id = st.selectbox(
+                "ÇIKIŞI YAPILACAK MİSAFİR:",
+                options=df['id'].tolist(),
+                format_func=lambda x: f"{df[df['id']==x]['misafir_adi'].values[0]} ({df[df['id']==x]['oda_adi'].values[0]})"
+            )
+            with st.form("cikis_onay_form"):
+                cikis_yap = st.form_submit_button("✅ Çıkışı Tamamla ve Arşive Al", use_container_width=True)
+                if cikis_yap:
+                    with get_db() as conn:
+                        conn.execute("UPDATE rezervasyonlar SET durum = 'Tamamlandı' WHERE id = ?", (secilen_cikis_id,))
+                        conn.commit()
+                    st.success("Çıkış yapıldı ve arşive kaldırıldı.")
+                    st.rerun()
     else:
-        st.info("Aktif konaklama kaydı bulunmuyor.")
+        st.info("Aktif rezervasyon bulunmuyor.")
 
 # ==========================================
 # 5. REZERVASYON ARŞİVİ
 # ==========================================
 elif menu == "📁 Rezervasyon Arşivi":
-    st.markdown("## 📁 Tamamlanan & Geçmiş Rezervasyon Arşivi")
-    st.caption("Çıkışı verilmiş olan tüm geçmiş misafir kayıtları ve gelir dökümü.")
+    st.markdown("## 📁 Tamamlanan Rezervasyon Arşivi")
 
     with get_db() as conn:
         arsiv_df = pd.read_sql_query("""
-            SELECT o.oda_adi, r.misafir_adi, r.telefon, r.giris_tarihi, r.cikis_tarihi, r.toplam_ucret, r.durum
+            SELECT o.oda_adi, r.misafir_adi, r.telefon, r.giris_tarihi, r.cikis_tarihi, r.toplam_ucret
             FROM rezervasyonlar r
             JOIN odalar o ON r.oda_id = o.id
             WHERE r.durum = 'Tamamlandı'
@@ -498,57 +524,68 @@ elif menu == "📁 Rezervasyon Arşivi":
 
     if not arsiv_df.empty:
         toplam_kazanc = arsiv_df['toplam_ucret'].sum()
-        st.markdown(f'<div class="stat-card" style="max-width:350px;"><div class="stat-label">Arşivdeki Toplam Hasılat</div><div class="stat-num" style="color:#10b981;">{toplam_kazanc:,.0f} TL</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="stat-box" style="max-width:350px;"><div class="stat-label">Arşivdeki Toplam Ciro</div><div class="stat-val" style="color:#10b981;">{toplam_kazanc:,.0f} TL</div></div>', unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
-        arsiv_goster = arsiv_df.rename(columns={
+        goster = arsiv_df.rename(columns={
             'oda_adi': 'DAİRE',
             'misafir_adi': 'MİSAFİR ADI SOYADI',
             'telefon': 'TELEFON',
             'giris_tarihi': 'GİRİŞ TARİHİ',
             'cikis_tarihi': 'ÇIKIŞ TARİHİ',
-            'toplam_ucret': 'TAHSİL EDİLEN TUTAR (TL)',
-            'durum': 'DURUM'
+            'toplam_ucret': 'TAHSİL EDİLEN (TL)'
         })
-        st.dataframe(arsiv_goster, use_container_width=True, hide_index=True)
+        st.dataframe(goster, use_container_width=True, hide_index=True)
     else:
-        st.info("Henüz arşive kaldırılmış tamamlanmış bir rezervasyon kaydı yok.")
+        st.info("Arşivde tamamlanmış kayıt bulunmuyor.")
 
 # ==========================================
-# 6. DAİRE AYARLARI & DÜZENLEME
+# 6. DAİRE & APART AYARLARI
 # ==========================================
-elif menu == "⚙️ Daire Ayarları & Düzenleme":
-    st.markdown("## ⚙️ Daire Ayarları ve İsim Düzenleme")
-    st.caption("Dairelerin isimlerini, bulundukları katı veya kapasitelerini tablodan değiştirip kaydedebilirsiniz.")
+elif menu == "⚙️ Daire & Apart Ayarları":
+    st.markdown("## ⚙️ Apart İsmi ve Daire Yönetimi")
+
+    # 1. Apart İsmi Ayarı
+    with st.container():
+        st.markdown("#### 🏷️ Apart Adını Değiştir")
+        col_ad1, col_ad2 = st.columns([3, 1])
+        with col_ad1:
+            yeni_apart_adi = st.text_input("Apart Başlığı / Tabelası", value=apart_baslik)
+        with col_ad2:
+            st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
+            if st.button("İsmi Kaydet", use_container_width=True):
+                with get_db() as conn:
+                    conn.execute("UPDATE ayarlar SET deger = ? WHERE anahtar = 'apart_adi'", (yeni_apart_adi.strip(),))
+                    conn.commit()
+                st.success("Apart ismi güncellendi!")
+                st.rerun()
+
+    st.markdown("---")
+
+    # 2. Daireleri Özgürce Düzenleme Paneli
+    st.markdown("#### 🏢 Mevcut Daireleri Özgürce Düzenle")
+    st.caption("Her dairenin ismini, katını ve kapasitesini tek tek özgürce değiştirin:")
 
     with get_db() as conn:
-        daireler_df = pd.read_sql_query("SELECT id, oda_adi, kat, kapasite FROM odalar ORDER BY id ASC", conn)
+        daireler = conn.execute("SELECT id, oda_adi, kat, kapasite FROM odalar ORDER BY id ASC").fetchall()
 
-    daireler_df = daireler_df.rename(columns={
-        'id': 'ID',
-        'oda_adi': 'DAİRE ADI',
-        'kat': 'BULUNDUĞU KAT',
-        'kapasite': 'KAPASİTE (KİŞİ)'
-    })
+    for d_id, d_adi, d_kat, d_kap in daireler:
+        with st.expander(f"🏠 {d_adi} ({d_kat} - {d_kap} Kişilik)", expanded=False):
+            with st.form(f"form_daire_{d_id}"):
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    duz_ad = st.text_input("Daire Adı / No", value=d_adi)
+                with c2:
+                    kat_secenek = ["Çatı Katı", "3. Kat", "2. Kat", "1. Kat", "Zemin Kat", "Bahçe Katı"]
+                    kat_idx = kat_secenek.index(d_kat) if d_kat in kat_secenek else 0
+                    duz_kat = st.selectbox("Katı", options=kat_secenek, index=kat_idx)
+                with c3:
+                    duz_kap = st.number_input("Kapasite (Kişi)", min_value=1, max_value=20, value=d_kap)
 
-    with st.form("daire_duzenle_form"):
-        st.markdown("#### ✏️ Daire Bilgilerini Düzenlenebilir Tablo")
-        duzenlenmis_df = st.data_editor(
-            daireler_df,
-            disabled=["ID"],
-            use_container_width=True,
-            hide_index=True
-        )
-        
-        kaydet_btn = st.form_submit_button("💾 Değişiklikleri Veritabanına Kaydet", use_container_width=True)
-        if kaydet_btn:
-            with get_db() as conn:
-                for _, row in duzenlenmis_df.iterrows():
-                    conn.execute("""
-                        UPDATE odalar 
-                        SET oda_adi = ?, kat = ?, kapasite = ?
-                        WHERE id = ?
-                    """, (row['DAİRE ADI'], row['BULUNDUĞU KAT'], int(row['KAPASİTE (KİŞİ)']), int(row['ID'])))
-                conn.commit()
-            st.success("🎉 Daire bilgileri başarıyla güncellendi!")
-            st.rerun()
+                kaydet_daire = st.form_submit_button("💾 Daireyi Güncelle")
+                if kaydet_daire:
+                    with get_db() as conn:
+                        conn.execute("UPDATE odalar SET oda_adi = ?, kat = ?, kapasite = ? WHERE id = ?", (duz_ad.strip(), duz_kat, duz_kap, d_id))
+                        conn.commit()
+                    st.success(f"{duz_ad} başarıyla güncellendi!")
+                    st.rerun()
