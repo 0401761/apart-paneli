@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+import os
 from datetime import date, datetime, timedelta
 import urllib.parse
 import calendar
@@ -13,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- MODERN BALON / PILL CSS TASARIMI ---
+# --- MODERN BALON / PILL & FOTOĞRAF CSS TASARIMI ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -31,7 +32,16 @@ st.markdown("""
         border-right: 1px solid rgba(255, 255, 255, 0.08);
     }
 
-    /* Balon Pill Butonlar */
+    /* Sol Menüdeki Bina Fotoğrafı Stili */
+    section[data-testid="stSidebar"] img {
+        border-radius: 18px !important;
+        object-fit: cover !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important;
+        margin-bottom: 12px !important;
+    }
+
+    /* Balon Pill Navigasyon Butonları */
     div[data-testid="stRadio"] > div {
         display: flex;
         flex-direction: column;
@@ -71,6 +81,7 @@ st.markdown("""
         font-weight: 700 !important;
     }
 
+    /* Metrik Kartları */
     .stat-box {
         background: linear-gradient(145deg, #1e293b, #0f172a);
         border: 1px solid rgba(255, 255, 255, 0.08);
@@ -94,6 +105,7 @@ st.markdown("""
         margin-top: 4px;
     }
 
+    /* Daire Kartları */
     .room-card {
         border-radius: 18px;
         padding: 16px 18px;
@@ -253,6 +265,7 @@ def init_db():
     turso_execute("INSERT OR IGNORE INTO ayarlar (anahtar, deger) VALUES ('wifi_adi', 'Apart_Misafir')")
     turso_execute("INSERT OR IGNORE INTO ayarlar (anahtar, deger) VALUES ('wifi_sifre', '12345678')")
     turso_execute("INSERT OR IGNORE INTO ayarlar (anahtar, deger) VALUES ('konum_linki', 'https://maps.google.com')")
+    turso_execute("INSERT OR IGNORE INTO ayarlar (anahtar, deger) VALUES ('bina_foto', 'bina.jpg')")
 
     _, count_rows = turso_execute("SELECT COUNT(*) FROM odalar")
     if count_rows[0][0] == 0:
@@ -282,9 +295,16 @@ apart_baslik = get_ayar('apart_adi', 'EDA BUTİK APART')
 wifi_adi = get_ayar('wifi_adi', 'Apart_Misafir')
 wifi_sifre = get_ayar('wifi_sifre', '12345678')
 konum_linki = get_ayar('konum_linki', 'https://maps.google.com')
+bina_foto = get_ayar('bina_foto', 'bina.jpg')
 
-# --- SIDEBAR ---
+# --- SIDEBAR (FOTOĞRAFLI YÖNETİM ALANI) ---
 with st.sidebar:
+    # Boydan Bina Fotoğrafı Alanı
+    if os.path.exists(bina_foto):
+        st.image(bina_foto, use_container_width=True)
+    elif bina_foto.startswith("http"):
+        st.image(bina_foto, use_container_width=True)
+    
     st.markdown(f"## 🏢 {apart_baslik}")
     st.caption("Yönetim Portalı")
     st.markdown("---")
@@ -488,7 +508,6 @@ elif menu == "✨ Yeni Rezervasyon":
                         st.balloons()
                         st.rerun()
 
-            # WhatsApp Mesaj Formatı (Bozulmayan Temiz URL ve WhatsApp Kalın Yazı Stili)
             if "son_rez" in st.session_state:
                 sr = st.session_state["son_rez"]
                 clean_tel = "".join(filter(str.isdigit, sr['tel']))
@@ -862,13 +881,14 @@ elif menu == "📁 Rezervasyon Arşivi":
 # 9. DAİRE & APART AYARLARI
 # ==========================================
 elif menu == "⚙️ Daire & Apart Ayarları":
-    st.markdown("## ⚙️ Apart, Wi-Fi, Konum ve Daire Ayarları")
+    st.markdown("## ⚙️ Apart, Fotoğraf, Wi-Fi, Konum ve Daire Ayarları")
 
-    with st.expander("🏨 Apart İsmi, Wi-Fi & Konum Bilgileri (WhatsApp İçin)", expanded=True):
+    with st.expander("🏨 Apart İsmi, Bina Fotoğrafı, Wi-Fi & Konum", expanded=True):
         with st.form("genel_ayarlar_form"):
             c_ay1, c_ay2 = st.columns(2)
             with c_ay1:
                 y_apart = st.text_input("Apart İsmi / Tabelası", value=apart_baslik)
+                y_foto = st.text_input("Bina Fotoğrafı (Dosya adı: bina.jpg veya İnternet URL)", value=bina_foto)
                 y_wifi_ad = st.text_input("Misafir Wi-Fi Ağ Adı", value=wifi_adi)
             with c_ay2:
                 y_wifi_sif = st.text_input("Misafir Wi-Fi Şifresi", value=wifi_sifre)
@@ -876,10 +896,11 @@ elif menu == "⚙️ Daire & Apart Ayarları":
 
             if st.form_submit_button("💾 Genel Ayarları Kaydet", use_container_width=True):
                 turso_execute("UPDATE ayarlar SET deger = ? WHERE anahtar = 'apart_adi'", [y_apart.strip()])
+                turso_execute("UPDATE ayarlar SET deger = ? WHERE anahtar = 'bina_foto'", [y_foto.strip()])
                 turso_execute("UPDATE ayarlar SET deger = ? WHERE anahtar = 'wifi_adi'", [y_wifi_ad.strip()])
                 turso_execute("UPDATE ayarlar SET deger = ? WHERE anahtar = 'wifi_sifre'", [y_wifi_sif.strip()])
                 turso_execute("UPDATE ayarlar SET deger = ? WHERE anahtar = 'konum_linki'", [y_konum.strip()])
-                st.success("Tüm işletme ayarları güncellendi!")
+                st.success("Tüm işletme ve fotoğraf ayarları güncellendi!")
                 st.rerun()
 
     st.markdown("---")
