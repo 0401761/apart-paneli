@@ -1,5 +1,5 @@
 import streamlit as st
-import sqlite3
+import libsql_client
 import pandas as pd
 from datetime import date, datetime, timedelta
 import urllib.parse
@@ -133,22 +133,38 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- VERİTABANI İŞLEMLERİ ---
-DB_NAME = "apart_yonetim.db"
+# --- TURSO BULUT VERİTABANI BAĞLANTISI ---
+TURSO_URL = st.secrets["TURSO_URL"]
+TURSO_TOKEN = st.secrets["TURSO_TOKEN"]
 
-def get_db():
-    return sqlite3.connect(DB_NAME, check_same_thread=False)
+def get_client():
+    return libsql_client.create_client_sync(url=TURSO_URL, auth_token=TURSO_TOKEN)
+
+def execute_query(query, params=None):
+    client = get_client()
+    try:
+        if params:
+            return client.execute(query, params)
+        return client.execute(query)
+    finally:
+        client.close()
+
+def query_df(query, params=None):
+    res = execute_query(query, params)
+    columns = res.columns
+    data = [list(row) for row in res.rows]
+    return pd.DataFrame(data, columns=columns)
 
 def init_db():
-    with get_db() as conn:
-        c = conn.cursor()
-        c.execute("""
+    client = get_client()
+    try:
+        client.execute("""
             CREATE TABLE IF NOT EXISTS ayarlar (
                 anahtar TEXT PRIMARY KEY,
                 deger TEXT
             )
         """)
-        c.execute("""
+        client.execute("""
             CREATE TABLE IF NOT EXISTS odalar (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 oda_adi TEXT NOT NULL,
@@ -157,7 +173,7 @@ def init_db():
                 gecelik_fiyat REAL DEFAULT 1500
             )
         """)
-        c.execute("""
+        client.execute("""
             CREATE TABLE IF NOT EXISTS rezervasyonlar (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 oda_id INTEGER NOT NULL,
@@ -169,11 +185,10 @@ def init_db():
                 cikis_tarihi TEXT NOT NULL,
                 toplam_ucret REAL DEFAULT 0,
                 alinan_kapora REAL DEFAULT 0,
-                durum TEXT DEFAULT 'Aktif',
-                FOREIGN KEY (oda_id) REFERENCES odalar (id)
+                durum TEXT DEFAULT 'Aktif'
             )
         """)
-        c.execute("""
+        client.execute("""
             CREATE TABLE IF NOT EXISTS giderler (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 baslik TEXT NOT NULL,
@@ -183,25 +198,12 @@ def init_db():
             )
         """)
 
-        # Tablo sütun güncellemeleri (migration emniyeti)
-        c.execute("PRAGMA table_info(odalar)")
-        oda_cols = [r[1] for r in c.fetchall()]
-        if "gecelik_fiyat" not in oda_cols:
-            c.execute("ALTER TABLE odalar ADD COLUMN gecelik_fiyat REAL DEFAULT 1500")
-
-        c.execute("PRAGMA table_info(rezervasyonlar)")
-        rez_cols = [r[1] for r in c.fetchall()]
-        if "tc_pasaport" not in rez_cols:
-            c.execute("ALTER TABLE rezervasyonlar ADD COLUMN tc_pasaport TEXT")
-        if "plaka" not in rez_cols:
-            c.execute("ALTER TABLE rezervasyonlar ADD COLUMN plaka TEXT")
-
         # Varsayılan apart ismi
-        c.execute("INSERT OR IGNORE INTO ayarlar (anahtar, deger) VALUES ('apart_adi', 'LUX APART')")
+        client.execute("INSERT OR IGNORE INTO ayarlar (anahtar, deger) VALUES ('apart_adi', 'LUX APART')")
 
-        # 9 Daire Başlangıç Verisi
-        c.execute("SELECT COUNT(*) FROM odalar")
-        if c.fetchone()[0] == 0:
+        # 9 Daireyi kontrol et ve yükle
+        c_res = client.execute("SELECT COUNT(*) FROM odalar")
+        if c_res.rows[0][0] == 0:
             varsayilan = [
                 ("Çatı Katı Daire", "Çatı Katı", 2, 1800),
                 ("Daire 301", "3. Kat", 4, 1500),
@@ -213,24 +215,25 @@ def init_db():
                 ("Zemin Daire 1", "Zemin Kat", 3, 1300),
                 ("Zemin Daire 2", "Zemin Kat", 3, 1300)
             ]
-            c.executemany("INSERT INTO odalar (oda_adi, kat, kapasite, gecelik_fiyat) VALUES (?, ?, ?, ?)", varsayilan)
-        conn.commit()
+            for o_adi, kat, kap, fyt in varsayilan:
+                client.execute("INSERT INTO odalar (oda_adi, kat, kapasite, gecelik_fiyat) VALUES (?, ?, ?, ?)", [o_adi, kat, kap, fyt])
+    finally:
+        client.close()
 
 init_db()
 
 def get_apart_adi():
-    with get_db() as conn:
-        c = conn.cursor()
-        c.execute("SELECT deger FROM ayarlar WHERE anahtar = 'apart_adi'")
-        res = c.fetchone()
-        return res[0] if res else "APART YÖNETİM"
+    res = execute_query("SELECT deger FROM ayarlar WHERE anahtar = 'apart_adi'")
+    if res.rows:
+        return res.rows[0][0]
+    return "APART YÖNETİM"
 
 apart_baslik = get_apart_adi()
 
 # --- SIDEBAR (NAVİGASYON & TARİH GEZGİNİ) ---
 with st.sidebar:
     st.markdown(f"## 🏢 {apart_baslik}")
-    st.caption("Apart Yönetim & Takip Sistemi")
+    st.caption("Bulut Destekli Apart Portalı")
     st.markdown("---")
     
     menu = st.radio(
@@ -249,7 +252,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("#### 🗓️ Gözlem Tarihi")
-    st.caption("Doluluk durumunu geçmiş veya gelecek tarihe göre inceleyin:")
+    st.caption("Doluluk durumunu tarihe göre inceleyin:")
     secilen_tarih = st.date_input("İncelenen Tarih", value=date.today())
     secilen_tarih_str = secilen_tarih.strftime("%Y-%m-%d")
 
@@ -260,17 +263,15 @@ if menu == "🏢 Kat Planı & Durum":
     st.markdown(f"## 🏢 {apart_baslik} - Kat Planı ve Doluluk")
     st.caption(f"İncelenen Tarih: **{secilen_tarih.strftime('%d.%m.%Y')}**")
 
-    with get_db() as conn:
-        c = conn.cursor()
-        c.execute("SELECT id, oda_adi, kat, kapasite, gecelik_fiyat FROM odalar ORDER BY id ASC")
-        tum_odalar = [{"id": r[0], "oda_adi": r[1], "kat": r[2], "kapasite": r[3], "fiyat": r[4]} for r in c.fetchall()]
-        
-        rez_df = pd.read_sql_query("""
-            SELECT r.*, o.oda_adi 
-            FROM rezervasyonlar r 
-            JOIN odalar o ON r.oda_id = o.id 
-            WHERE r.durum = 'Aktif'
-        """, conn)
+    odalar_res = execute_query("SELECT id, oda_adi, kat, kapasite, gecelik_fiyat FROM odalar ORDER BY id ASC")
+    tum_odalar = [{"id": r[0], "oda_adi": r[1], "kat": r[2], "kapasite": r[3], "fiyat": r[4]} for r in odalar_res.rows]
+    
+    rez_df = query_df("""
+        SELECT r.*, o.oda_adi 
+        FROM rezervasyonlar r 
+        JOIN odalar o ON r.oda_id = o.id 
+        WHERE r.durum = 'Aktif'
+    """)
 
     if not rez_df.empty:
         su_an_dolu = rez_df[(rez_df['giris_tarihi'] <= secilen_tarih_str) & (rez_df['cikis_tarihi'] > secilen_tarih_str)]
@@ -306,7 +307,7 @@ if menu == "🏢 Kat Planı & Durum":
             with cols[idx]:
                 if oda["id"] in dolu_odalar:
                     rez = dolu_odalar[oda["id"]]
-                    kalan = rez['toplam_ucret'] - rez['alinan_kapora']
+                    kalan = float(rez['toplam_ucret']) - float(rez['alinan_kapora'])
                     st.markdown(f"""
                     <div class="room-card room-busy">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -314,7 +315,7 @@ if menu == "🏢 Kat Planı & Durum":
                             <span class="pill-badge pill-busy">DOLU</span>
                         </div>
                         <div style="margin-top:10px; font-size:13px; color:#cbd5e1; line-height:1.6;">
-                            👤 <b>{rez['misafir_adi'].upper()}</b><br>
+                            👤 <b>{str(rez['misafir_adi']).upper()}</b><br>
                             📞 <code>{rez['telefon'] or 'Yok'}</code><br>
                             🆔 TC/Pas: <b>{rez['tc_pasaport'] or '-'}</b> | 🚗 {rez['plaka'] or '-'}<br>
                             📅 Çıkış: <b>{rez['cikis_tarihi']}</b><br>
@@ -357,18 +358,17 @@ elif menu == "✨ Yeni Rezervasyon":
         st.info(f"🌙 Konaklama Süresi: **{gece_sayisi} Gece**")
         g_str = giris.strftime("%Y-%m-%d")
         c_str = cikis.strftime("%Y-%m-%d")
-        with get_db() as conn:
-            c = conn.cursor()
-            c.execute("""
-                SELECT id, oda_adi, kat, kapasite, gecelik_fiyat FROM odalar
-                WHERE id NOT IN (
-                    SELECT oda_id FROM rezervasyonlar
-                    WHERE durum = 'Aktif'
-                      AND NOT (cikis_tarihi <= ? OR giris_tarihi >= ?)
-                )
-                ORDER BY id ASC
-            """, (g_str, c_str))
-            musaitler = c.fetchall()
+
+        musait_res = execute_query("""
+            SELECT id, oda_adi, kat, kapasite, gecelik_fiyat FROM odalar
+            WHERE id NOT IN (
+                SELECT oda_id FROM rezervasyonlar
+                WHERE durum = 'Aktif'
+                  AND NOT (cikis_tarihi <= ? OR giris_tarihi >= ?)
+            )
+            ORDER BY id ASC
+        """, [g_str, c_str])
+        musaitler = musait_res.rows
 
         if musaitler:
             secenekler = {f"{r[1]} ({r[2]} - {r[3]} Kişi - {r[4]:,.0f} TL/gece)": r for r in musaitler}
@@ -396,13 +396,11 @@ elif menu == "✨ Yeni Rezervasyon":
                     if not misafir.strip():
                         st.error("Lütfen misafir adını giriniz.")
                     else:
-                        with get_db() as conn:
-                            cur = conn.cursor()
-                            cur.execute("""
-                                INSERT INTO rezervasyonlar (oda_id, misafir_adi, telefon, tc_pasaport, plaka, giris_tarihi, cikis_tarihi, toplam_ucret, alinan_kapora)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """, (secilen_id, misafir.strip(), telefon.strip(), tc_pas.strip(), plaka.strip(), g_str, c_str, toplam, kapora))
-                            conn.commit()
+                        execute_query("""
+                            INSERT INTO rezervasyonlar (oda_id, misafir_adi, telefon, tc_pasaport, plaka, giris_tarihi, cikis_tarihi, toplam_ucret, alinan_kapora)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, [secilen_id, misafir.strip(), telefon.strip(), tc_pas.strip(), plaka.strip(), g_str, c_str, toplam, kapora])
+                        
                         st.session_state["son_rez"] = {
                             "misafir": misafir.strip(),
                             "tel": telefon.strip(),
@@ -411,11 +409,10 @@ elif menu == "✨ Yeni Rezervasyon":
                             "cikis": cikis.strftime('%d.%m.%Y'),
                             "kalan": kalan_ucret
                         }
-                        st.success(f"🎉 {secilen_oda_data[1]} için rezervasyon başarıyla açıldı!")
+                        st.success(f"🎉 {secilen_oda_data[1]} için rezervasyon buluta kaydedildi!")
                         st.balloons()
                         st.rerun()
 
-            # Kayıt sonrası WhatsApp onay butonu
             if "son_rez" in st.session_state:
                 sr = st.session_state["son_rez"]
                 clean_tel = "".join(filter(str.isdigit, sr['tel']))
@@ -450,7 +447,7 @@ elif menu == "✨ Yeni Rezervasyon":
 # ==========================================
 elif menu == "📅 Aylık Doluluk Takvimi":
     st.markdown("## 📅 Aylık Doluluk Takvimi")
-    st.caption("Aylar arasında gezinin, hiçbir gün taşmadan tüm ayı inceleyin.")
+    st.caption("Aylar arasında gezinin, tüm ayı eksiksiz inceleyin.")
 
     aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
     ay_col1, ay_col2 = st.columns(2)
@@ -464,19 +461,18 @@ elif menu == "📅 Aylık Doluluk Takvimi":
     gunler = [date(secilen_yil, secilen_ay_num, d) for d in range(1, toplam_gun + 1)]
     basliklar = [f"{d.day:02d} {secilen_ay_adi[:3]}" for d in gunler]
 
-    with get_db() as conn:
-        odalar = conn.execute("SELECT id, oda_adi, kat FROM odalar ORDER BY id ASC").fetchall()
-        rezler = conn.execute("SELECT oda_id, misafir_adi, giris_tarihi, cikis_tarihi FROM rezervasyonlar WHERE durum = 'Aktif'").fetchall()
+    odalar_res = execute_query("SELECT id, oda_adi, kat FROM odalar ORDER BY id ASC")
+    rez_res = execute_query("SELECT oda_id, misafir_adi, giris_tarihi, cikis_tarihi FROM rezervasyonlar WHERE durum = 'Aktif'")
 
     matris = []
-    for o_id, o_adi, o_kat in odalar:
+    for o_id, o_adi, o_kat in odalar_res.rows:
         satir = {"DAİRE": f"🏠 {o_adi}"}
         for g, baslik in zip(gunler, basliklar):
             g_str = g.strftime("%Y-%m-%d")
             isim = ""
-            for r_oid, r_isim, r_gir, r_cik in rezler:
+            for r_oid, r_isim, r_gir, r_cik in rez_res.rows:
                 if r_oid == o_id and (r_gir <= g_str < r_cik):
-                    isim = r_isim.split()[0].upper()
+                    isim = str(r_isim).split()[0].upper()
                     break
             satir[baslik] = f"🔴 {isim}" if isim else "🟢 Boş"
         matris.append(satir)
@@ -490,21 +486,20 @@ elif menu == "📅 Aylık Doluluk Takvimi":
 elif menu == "💳 Kasa & Bakiyeler":
     st.markdown("## 💳 Kasa, Tahsilat & Rezervasyon Düzenleme")
 
-    with get_db() as conn:
-        df = pd.read_sql_query("""
-            SELECT r.id, o.oda_adi, r.oda_id, r.misafir_adi, r.telefon, r.tc_pasaport, r.plaka, 
-                   r.giris_tarihi, r.cikis_tarihi, r.toplam_ucret, r.alinan_kapora, 
-                   (r.toplam_ucret - r.alinan_kapora) as kalan_bakiye
-            FROM rezervasyonlar r
-            JOIN odalar o ON r.oda_id = o.id
-            WHERE r.durum = 'Aktif'
-            ORDER BY r.giris_tarihi ASC
-        """, conn)
+    df = query_df("""
+        SELECT r.id, o.oda_adi, r.oda_id, r.misafir_adi, r.telefon, r.tc_pasaport, r.plaka, 
+               r.giris_tarihi, r.cikis_tarihi, r.toplam_ucret, r.alinan_kapora, 
+               (r.toplam_ucret - r.alinan_kapora) as kalan_bakiye
+        FROM rezervasyonlar r
+        JOIN odalar o ON r.oda_id = o.id
+        WHERE r.durum = 'Aktif'
+        ORDER BY r.giris_tarihi ASC
+    """)
 
     if not df.empty:
-        ciro = df['toplam_ucret'].sum()
-        tahsilat = df['alinan_kapora'].sum()
-        kalan = df['kalan_bakiye'].sum()
+        ciro = df['toplam_ucret'].astype(float).sum()
+        tahsilat = df['alinan_kapora'].astype(float).sum()
+        kalan = df['kalan_bakiye'].astype(float).sum()
 
         c1, c2, c3 = st.columns(3)
         c1.markdown(f'<div class="stat-box"><div class="stat-label">Toplam Sözleşme</div><div class="stat-val">{ciro:,.0f} TL</div></div>', unsafe_allow_html=True)
@@ -513,7 +508,6 @@ elif menu == "💳 Kasa & Bakiyeler":
 
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Excel / CSV İndirme Butonu
         csv_data = df.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Aktif Rezervasyonları İndir (Excel/CSV)",
@@ -561,13 +555,11 @@ elif menu == "💳 Kasa & Bakiyeler":
                 
                 guncelle_btn = st.form_submit_button("💾 Bilgileri Güncelle")
                 if guncelle_btn:
-                    with get_db() as conn:
-                        conn.execute("""
-                            UPDATE rezervasyonlar 
-                            SET misafir_adi = ?, telefon = ?, tc_pasaport = ?, plaka = ?, toplam_ucret = ?, alinan_kapora = ?
-                            WHERE id = ?
-                        """, (yeni_misafir.strip(), yeni_tel.strip(), yeni_tc.strip(), yeni_plaka.strip(), yeni_toplam, yeni_kapora, secilen_duzenle_id))
-                        conn.commit()
+                    execute_query("""
+                        UPDATE rezervasyonlar 
+                        SET misafir_adi = ?, telefon = ?, tc_pasaport = ?, plaka = ?, toplam_ucret = ?, alinan_kapora = ?
+                        WHERE id = ?
+                    """, [yeni_misafir.strip(), yeni_tel.strip(), yeni_tc.strip(), yeni_plaka.strip(), yeni_toplam, yeni_kapora, secilen_duzenle_id])
                     st.success("Rezervasyon başarıyla güncellendi!")
                     st.rerun()
 
@@ -582,16 +574,12 @@ elif menu == "💳 Kasa & Bakiyeler":
             cikis_col, iptal_col = st.columns(2)
             with cikis_col:
                 if st.button("✅ Çıkış Yap (Arşive Al)", use_container_width=True):
-                    with get_db() as conn:
-                        conn.execute("UPDATE rezervasyonlar SET durum = 'Tamamlandı' WHERE id = ?", (secilen_islem_id,))
-                        conn.commit()
+                    execute_query("UPDATE rezervasyonlar SET durum = 'Tamamlandı' WHERE id = ?", [secilen_islem_id])
                     st.success("Çıkış yapıldı ve arşive kaldırıldı.")
                     st.rerun()
             with iptal_col:
                 if st.button("❌ Rezervasyonu İptal Et", use_container_width=True):
-                    with get_db() as conn:
-                        conn.execute("UPDATE rezervasyonlar SET durum = 'İptal Edildi' WHERE id = ?", (secilen_islem_id,))
-                        conn.commit()
+                    execute_query("UPDATE rezervasyonlar SET durum = 'İptal Edildi' WHERE id = ?", [secilen_islem_id])
                     st.warning("Rezervasyon iptal edildi, oda boşa çıkarıldı.")
                     st.rerun()
     else:
@@ -602,17 +590,17 @@ elif menu == "💳 Kasa & Bakiyeler":
 # ==========================================
 elif menu == "📉 Gider & Net Kâr":
     st.markdown("## 📉 Gider Takibi & Net Kâr Hesabı")
-    st.caption("Apartın işletme giderlerini kaydedin, net kârınızı tek bakışta görün.")
+    st.caption("Apartın giderlerini kaydedin, net kârınızı tek bakışta görün.")
 
-    with get_db() as conn:
-        gider_df = pd.read_sql_query("SELECT * FROM giderler ORDER BY tarih DESC", conn)
-        toplam_gelir_res = conn.execute("SELECT SUM(toplam_ucret) FROM rezervasyonlar WHERE durum IN ('Aktif', 'Tamamlandı')").fetchone()[0] or 0.0
+    gider_df = query_df("SELECT * FROM giderler ORDER BY tarih DESC")
+    gelir_res = execute_query("SELECT SUM(toplam_ucret) FROM rezervasyonlar WHERE durum IN ('Aktif', 'Tamamlandı')")
+    toplam_gelir_val = float(gelir_res.rows[0][0]) if (gelir_res.rows and gelir_res.rows[0][0] is not None) else 0.0
 
-    toplam_gider = gider_df['tutar'].sum() if not gider_df.empty else 0.0
-    net_kar = toplam_gelir_res - toplam_gider
+    toplam_gider = gider_df['tutar'].astype(float).sum() if not gider_df.empty else 0.0
+    net_kar = toplam_gelir_val - toplam_gider
 
     g1, g2, g3 = st.columns(3)
-    g1.markdown(f'<div class="stat-box"><div class="stat-label">Toplam Gelir</div><div class="stat-val" style="color:#10b981;">{toplam_gelir_res:,.0f} TL</div></div>', unsafe_allow_html=True)
+    g1.markdown(f'<div class="stat-box"><div class="stat-label">Toplam Gelir</div><div class="stat-val" style="color:#10b981;">{toplam_gelir_val:,.0f} TL</div></div>', unsafe_allow_html=True)
     g2.markdown(f'<div class="stat-box"><div class="stat-label">Toplam Gider</div><div class="stat-val" style="color:#ef4444;">{toplam_gider:,.0f} TL</div></div>', unsafe_allow_html=True)
     g3.markdown(f'<div class="stat-box"><div class="stat-label">Net Kalan Kâr</div><div class="stat-val" style="color:#38bdf8;">{net_kar:,.0f} TL</div></div>', unsafe_allow_html=True)
 
@@ -629,10 +617,8 @@ elif menu == "📉 Gider & Net Kâr":
 
             ekle_btn = st.form_submit_button("Gideri Kaydet", use_container_width=True)
             if ekle_btn and g_baslik.strip():
-                with get_db() as conn:
-                    conn.execute("INSERT INTO giderler (baslik, kategori, tutar, tarih) VALUES (?, ?, ?, ?)",
-                                 (g_baslik.strip(), g_kat, g_tutar, g_tarih.strftime("%Y-%m-%d")))
-                    conn.commit()
+                execute_query("INSERT INTO giderler (baslik, kategori, tutar, tarih) VALUES (?, ?, ?, ?)",
+                              [g_baslik.strip(), g_kat, g_tutar, g_tarih.strftime("%Y-%m-%d")])
                 st.success("Gider kaydedildi!")
                 st.rerun()
 
@@ -655,23 +641,21 @@ elif menu == "📉 Gider & Net Kâr":
 elif menu == "📁 Rezervasyon Arşivi":
     st.markdown("## 📁 Tamamlanan & İptal Edilen Rezervasyon Arşivi")
 
-    with get_db() as conn:
-        arsiv_df = pd.read_sql_query("""
-            SELECT o.oda_adi, r.misafir_adi, r.telefon, r.tc_pasaport, r.plaka, r.giris_tarihi, r.cikis_tarihi, r.toplam_ucret, r.durum
-            FROM rezervasyonlar r
-            JOIN odalar o ON r.oda_id = o.id
-            WHERE r.durum IN ('Tamamlandı', 'İptal Edildi')
-            ORDER BY r.cikis_tarihi DESC
-        """, conn)
+    arsiv_df = query_df("""
+        SELECT o.oda_adi, r.misafir_adi, r.telefon, r.tc_pasaport, r.plaka, r.giris_tarihi, r.cikis_tarihi, r.toplam_ucret, r.durum
+        FROM rezervasyonlar r
+        JOIN odalar o ON r.oda_id = o.id
+        WHERE r.durum IN ('Tamamlandı', 'İptal Edildi')
+        ORDER BY r.cikis_tarihi DESC
+    """)
 
     if not arsiv_df.empty:
         tamamlananlar = arsiv_df[arsiv_df['durum'] == 'Tamamlandı']
-        toplam_kazanc = tamamlananlar['toplam_ucret'].sum()
+        toplam_kazanc = tamamlananlar['toplam_ucret'].astype(float).sum()
         
         st.markdown(f'<div class="stat-box" style="max-width:350px;"><div class="stat-label">Arşivdeki Tamamlanan Ciro</div><div class="stat-val" style="color:#10b981;">{toplam_kazanc:,.0f} TL</div></div>', unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Arşiv İndirme
         csv_arsiv = arsiv_df.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Tüm Arşivi İndir (Excel/CSV)",
@@ -709,9 +693,7 @@ elif menu == "⚙️ Daire & Apart Ayarları":
         with col_ad2:
             st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
             if st.button("İsmi Kaydet", use_container_width=True):
-                with get_db() as conn:
-                    conn.execute("UPDATE ayarlar SET deger = ? WHERE anahtar = 'apart_adi'", (yeni_apart_adi.strip(),))
-                    conn.commit()
+                execute_query("UPDATE ayarlar SET deger = ? WHERE anahtar = 'apart_adi'", [yeni_apart_adi.strip()])
                 st.success("Apart ismi güncellendi!")
                 st.rerun()
 
@@ -719,11 +701,10 @@ elif menu == "⚙️ Daire & Apart Ayarları":
     st.markdown("#### 🏢 Mevcut Daireleri & Gecelik Fiyatları Düzenle")
     st.caption("Her dairenin ismini, katını, kapasitesini ve standart gecelik fiyatını düzenleyin:")
 
-    with get_db() as conn:
-        daireler = conn.execute("SELECT id, oda_adi, kat, kapasite, gecelik_fiyat FROM odalar ORDER BY id ASC").fetchall()
+    daire_res = execute_query("SELECT id, oda_adi, kat, kapasite, gecelik_fiyat FROM odalar ORDER BY id ASC")
 
-    for d_id, d_adi, d_kat, d_kap, d_fiyat in daireler:
-        with st.expander(f"🏠 {d_adi} ({d_kat} - {d_kap} Kişilik - {d_fiyat:,.0f} TL/gece)", expanded=False):
+    for d_id, d_adi, d_kat, d_kap, d_fiyat in daire_res.rows:
+        with st.expander(f"🏠 {d_adi} ({d_kat} - {d_kap} Kişilik - {float(d_fiyat or 1500):,.0f} TL/gece)", expanded=False):
             with st.form(f"form_daire_{d_id}"):
                 c1, c2, c3, c4 = st.columns(4)
                 with c1:
@@ -733,15 +714,13 @@ elif menu == "⚙️ Daire & Apart Ayarları":
                     kat_idx = kat_secenek.index(d_kat) if d_kat in kat_secenek else 0
                     duz_kat = st.selectbox("Katı", options=kat_secenek, index=kat_idx)
                 with c3:
-                    duz_kap = st.number_input("Kapasite (Kişi)", min_value=1, max_value=20, value=d_kap)
+                    duz_kap = st.number_input("Kapasite (Kişi)", min_value=1, max_value=20, value=int(d_kap))
                 with c4:
                     duz_fiyat = st.number_input("Gecelik Taban Fiyat (TL)", min_value=0.0, step=100.0, value=float(d_fiyat or 1500))
 
                 kaydet_daire = st.form_submit_button("💾 Daireyi Güncelle")
                 if kaydet_daire:
-                    with get_db() as conn:
-                        conn.execute("UPDATE odalar SET oda_adi = ?, kat = ?, kapasite = ?, gecelik_fiyat = ? WHERE id = ?",
-                                     (duz_ad.strip(), duz_kat, duz_kap, duz_fiyat, d_id))
-                        conn.commit()
+                    execute_query("UPDATE odalar SET oda_adi = ?, kat = ?, kapasite = ?, gecelik_fiyat = ? WHERE id = ?",
+                                  [duz_ad.strip(), duz_kat, duz_kap, duz_fiyat, d_id])
                     st.success(f"{duz_ad} başarıyla güncellendi!")
                     st.rerun()
