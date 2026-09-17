@@ -1,6 +1,6 @@
 import streamlit as st
-import libsql_client
 import pandas as pd
+import requests
 from datetime import date, datetime, timedelta
 import urllib.parse
 import calendar
@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- MODERN BALON / PILL CSS TASARIMI ---
+# --- MODERN CSS TASARIMI ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -31,7 +31,7 @@ st.markdown("""
         border-right: 1px solid rgba(255, 255, 255, 0.08);
     }
 
-    /* Modern Balon / Pill Navigasyon Butonları */
+    /* Balon Pill Butonlar */
     div[data-testid="stRadio"] > div {
         display: flex;
         flex-direction: column;
@@ -71,7 +71,6 @@ st.markdown("""
         font-weight: 700 !important;
     }
 
-    /* İstatistik Kartları */
     .stat-box {
         background: linear-gradient(145deg, #1e293b, #0f172a);
         border: 1px solid rgba(255, 255, 255, 0.08);
@@ -95,7 +94,6 @@ st.markdown("""
         margin-top: 6px;
     }
 
-    /* Daire Kartları */
     .room-card {
         border-radius: 18px;
         padding: 18px 20px;
@@ -124,7 +122,6 @@ st.markdown("""
     .pill-free { background: #10b981; color: #022c22; }
     .pill-busy { background: #ef4444; color: #ffffff; }
 
-    /* Butonlar */
     div.stButton > button {
         border-radius: 14px !important;
         font-weight: 700 !important;
@@ -133,104 +130,128 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- TURSO BULUT VERİTABANI BAĞLANTISI ---
-TURSO_URL = st.secrets["TURSO_URL"]
+# --- TURSO HTTP PIPELINE MOTORU (SIFIR WEBSOCKET HATASI) ---
+TURSO_URL = st.secrets["TURSO_URL"].replace("libsql://", "https://")
 TURSO_TOKEN = st.secrets["TURSO_TOKEN"]
 
-def get_client():
-    return libsql_client.create_client_sync(url=TURSO_URL, auth_token=TURSO_TOKEN)
+def turso_execute(sql, params=None):
+    url = f"{TURSO_URL}/v2/pipeline"
+    headers = {
+        "Authorization": f"Bearer {TURSO_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    
+    stmt = {"sql": sql}
+    if params:
+        formatted_args = []
+        for p in params:
+            if p is None:
+                formatted_args.append({"type": "null"})
+            elif isinstance(p, (int, float)):
+                formatted_args.append({"type": "float" if isinstance(p, float) else "integer", "value": p})
+            else:
+                formatted_args.append({"type": "text", "value": str(p)})
+        stmt["args"] = formatted_args
 
-def execute_query(query, params=None):
-    client = get_client()
-    try:
-        if params:
-            return client.execute(query, params)
-        return client.execute(query)
-    finally:
-        client.close()
+    payload = {
+        "requests": [
+            {"type": "execute", "stmt": stmt},
+            {"type": "close"}
+        ]
+    }
+    
+    resp = requests.post(url, headers=headers, json=payload)
+    if not resp.ok:
+        raise Exception(f"Turso API Hatası: {resp.text}")
+        
+    data = resp.json()
+    result = data["results"][0]
+    if result["type"] == "error":
+        raise Exception(result["error"]["message"])
+        
+    resp_obj = result["response"]["result"]
+    cols = [c["name"] for c in resp_obj.get("cols", [])]
+    rows = []
+    for r in resp_obj.get("rows", []):
+        row_vals = []
+        for val in r:
+            row_vals.append(val.get("value") if val.get("type") != "null" else None)
+        rows.append(row_vals)
+    return cols, rows
 
-def query_df(query, params=None):
-    res = execute_query(query, params)
-    columns = res.columns
-    data = [list(row) for row in res.rows]
-    return pd.DataFrame(data, columns=columns)
+def query_df(sql, params=None):
+    cols, rows = turso_execute(sql, params)
+    return pd.DataFrame(rows, columns=cols)
 
 def init_db():
-    client = get_client()
-    try:
-        client.execute("""
-            CREATE TABLE IF NOT EXISTS ayarlar (
-                anahtar TEXT PRIMARY KEY,
-                deger TEXT
-            )
-        """)
-        client.execute("""
-            CREATE TABLE IF NOT EXISTS odalar (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                oda_adi TEXT NOT NULL,
-                kat TEXT NOT NULL,
-                kapasite INTEGER DEFAULT 3,
-                gecelik_fiyat REAL DEFAULT 1500
-            )
-        """)
-        client.execute("""
-            CREATE TABLE IF NOT EXISTS rezervasyonlar (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                oda_id INTEGER NOT NULL,
-                misafir_adi TEXT NOT NULL,
-                telefon TEXT,
-                tc_pasaport TEXT,
-                plaka TEXT,
-                giris_tarihi TEXT NOT NULL,
-                cikis_tarihi TEXT NOT NULL,
-                toplam_ucret REAL DEFAULT 0,
-                alinan_kapora REAL DEFAULT 0,
-                durum TEXT DEFAULT 'Aktif'
-            )
-        """)
-        client.execute("""
-            CREATE TABLE IF NOT EXISTS giderler (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                baslik TEXT NOT NULL,
-                kategori TEXT NOT NULL,
-                tutar REAL NOT NULL,
-                tarih TEXT NOT NULL
-            )
-        """)
+    turso_execute("""
+        CREATE TABLE IF NOT EXISTS ayarlar (
+            anahtar TEXT PRIMARY KEY,
+            deger TEXT
+        )
+    """)
+    turso_execute("""
+        CREATE TABLE IF NOT EXISTS odalar (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            oda_adi TEXT NOT NULL,
+            kat TEXT NOT NULL,
+            kapasite INTEGER DEFAULT 3,
+            gecelik_fiyat REAL DEFAULT 1500
+        )
+    """)
+    turso_execute("""
+        CREATE TABLE IF NOT EXISTS rezervasyonlar (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            oda_id INTEGER NOT NULL,
+            misafir_adi TEXT NOT NULL,
+            telefon TEXT,
+            tc_pasaport TEXT,
+            plaka TEXT,
+            giris_tarihi TEXT NOT NULL,
+            cikis_tarihi TEXT NOT NULL,
+            toplam_ucret REAL DEFAULT 0,
+            alinan_kapora REAL DEFAULT 0,
+            durum TEXT DEFAULT 'Aktif'
+        )
+    """)
+    turso_execute("""
+        CREATE TABLE IF NOT EXISTS giderler (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            baslik TEXT NOT NULL,
+            kategori TEXT NOT NULL,
+            tutar REAL NOT NULL,
+            tarih TEXT NOT NULL
+        )
+    """)
+    turso_execute("INSERT OR IGNORE INTO ayarlar (anahtar, deger) VALUES ('apart_adi', 'LUX APART')")
 
-        # Varsayılan apart ismi
-        client.execute("INSERT OR IGNORE INTO ayarlar (anahtar, deger) VALUES ('apart_adi', 'LUX APART')")
-
-        # 9 Daireyi kontrol et ve yükle
-        c_res = client.execute("SELECT COUNT(*) FROM odalar")
-        if c_res.rows[0][0] == 0:
-            varsayilan = [
-                ("Çatı Katı Daire", "Çatı Katı", 2, 1800),
-                ("Daire 301", "3. Kat", 4, 1500),
-                ("Daire 302", "3. Kat", 4, 1500),
-                ("Daire 201", "2. Kat", 4, 1500),
-                ("Daire 202", "2. Kat", 4, 1500),
-                ("Daire 101", "1. Kat", 4, 1500),
-                ("Daire 102", "1. Kat", 4, 1500),
-                ("Zemin Daire 1", "Zemin Kat", 3, 1300),
-                ("Zemin Daire 2", "Zemin Kat", 3, 1300)
-            ]
-            for o_adi, kat, kap, fyt in varsayilan:
-                client.execute("INSERT INTO odalar (oda_adi, kat, kapasite, gecelik_fiyat) VALUES (?, ?, ?, ?)", [o_adi, kat, kap, fyt])
-    finally:
-        client.close()
+    _, count_rows = turso_execute("SELECT COUNT(*) FROM odalar")
+    if count_rows[0][0] == 0:
+        varsayilan = [
+            ("Çatı Katı Daire", "Çatı Katı", 2, 1800),
+            ("Daire 301", "3. Kat", 4, 1500),
+            ("Daire 302", "3. Kat", 4, 1500),
+            ("Daire 201", "2. Kat", 4, 1500),
+            ("Daire 202", "2. Kat", 4, 1500),
+            ("Daire 101", "1. Kat", 4, 1500),
+            ("Daire 102", "1. Kat", 4, 1500),
+            ("Zemin Daire 1", "Zemin Kat", 3, 1300),
+            ("Zemin Daire 2", "Zemin Kat", 3, 1300)
+        ]
+        for o_adi, kat, kap, fyt in varsayilan:
+            turso_execute("INSERT INTO odalar (oda_adi, kat, kapasite, gecelik_fiyat) VALUES (?, ?, ?, ?)", [o_adi, kat, kap, fyt])
 
 init_db()
 
 def get_apart_adi():
-    res = execute_query("SELECT deger FROM ayarlar WHERE anahtar = 'apart_adi'")
-    if res.rows:
-        return res.rows[0][0]
+    _, rows = turso_execute("SELECT deger FROM ayarlar WHERE anahtar = 'apart_adi'")
+    if rows:
+        return rows[0][0]
     return "APART YÖNETİM"
 
 apart_baslik = get_apart_adi()
 
-# --- SIDEBAR (NAVİGASYON & TARİH GEZGİNİ) ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.markdown(f"## 🏢 {apart_baslik}")
     st.caption("Bulut Destekli Apart Portalı")
@@ -252,7 +273,6 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("#### 🗓️ Gözlem Tarihi")
-    st.caption("Doluluk durumunu tarihe göre inceleyin:")
     secilen_tarih = st.date_input("İncelenen Tarih", value=date.today())
     secilen_tarih_str = secilen_tarih.strftime("%Y-%m-%d")
 
@@ -263,8 +283,8 @@ if menu == "🏢 Kat Planı & Durum":
     st.markdown(f"## 🏢 {apart_baslik} - Kat Planı ve Doluluk")
     st.caption(f"İncelenen Tarih: **{secilen_tarih.strftime('%d.%m.%Y')}**")
 
-    odalar_res = execute_query("SELECT id, oda_adi, kat, kapasite, gecelik_fiyat FROM odalar ORDER BY id ASC")
-    tum_odalar = [{"id": r[0], "oda_adi": r[1], "kat": r[2], "kapasite": r[3], "fiyat": r[4]} for r in odalar_res.rows]
+    _, oda_rows = turso_execute("SELECT id, oda_adi, kat, kapasite, gecelik_fiyat FROM odalar ORDER BY id ASC")
+    tum_odalar = [{"id": r[0], "oda_adi": r[1], "kat": r[2], "kapasite": r[3], "fiyat": r[4]} for r in oda_rows]
     
     rez_df = query_df("""
         SELECT r.*, o.oda_adi 
@@ -359,7 +379,7 @@ elif menu == "✨ Yeni Rezervasyon":
         g_str = giris.strftime("%Y-%m-%d")
         c_str = cikis.strftime("%Y-%m-%d")
 
-        musait_res = execute_query("""
+        _, musaitler = turso_execute("""
             SELECT id, oda_adi, kat, kapasite, gecelik_fiyat FROM odalar
             WHERE id NOT IN (
                 SELECT oda_id FROM rezervasyonlar
@@ -368,7 +388,6 @@ elif menu == "✨ Yeni Rezervasyon":
             )
             ORDER BY id ASC
         """, [g_str, c_str])
-        musaitler = musait_res.rows
 
         if musaitler:
             secenekler = {f"{r[1]} ({r[2]} - {r[3]} Kişi - {r[4]:,.0f} TL/gece)": r for r in musaitler}
@@ -396,7 +415,7 @@ elif menu == "✨ Yeni Rezervasyon":
                     if not misafir.strip():
                         st.error("Lütfen misafir adını giriniz.")
                     else:
-                        execute_query("""
+                        turso_execute("""
                             INSERT INTO rezervasyonlar (oda_id, misafir_adi, telefon, tc_pasaport, plaka, giris_tarihi, cikis_tarihi, toplam_ucret, alinan_kapora)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """, [secilen_id, misafir.strip(), telefon.strip(), tc_pas.strip(), plaka.strip(), g_str, c_str, toplam, kapora])
@@ -461,16 +480,16 @@ elif menu == "📅 Aylık Doluluk Takvimi":
     gunler = [date(secilen_yil, secilen_ay_num, d) for d in range(1, toplam_gun + 1)]
     basliklar = [f"{d.day:02d} {secilen_ay_adi[:3]}" for d in gunler]
 
-    odalar_res = execute_query("SELECT id, oda_adi, kat FROM odalar ORDER BY id ASC")
-    rez_res = execute_query("SELECT oda_id, misafir_adi, giris_tarihi, cikis_tarihi FROM rezervasyonlar WHERE durum = 'Aktif'")
+    _, odalar_rows = turso_execute("SELECT id, oda_adi, kat FROM odalar ORDER BY id ASC")
+    _, rez_rows = turso_execute("SELECT oda_id, misafir_adi, giris_tarihi, cikis_tarihi FROM rezervasyonlar WHERE durum = 'Aktif'")
 
     matris = []
-    for o_id, o_adi, o_kat in odalar_res.rows:
+    for o_id, o_adi, o_kat in odalar_rows:
         satir = {"DAİRE": f"🏠 {o_adi}"}
         for g, baslik in zip(gunler, basliklar):
             g_str = g.strftime("%Y-%m-%d")
             isim = ""
-            for r_oid, r_isim, r_gir, r_cik in rez_res.rows:
+            for r_oid, r_isim, r_gir, r_cik in rez_rows:
                 if r_oid == o_id and (r_gir <= g_str < r_cik):
                     isim = str(r_isim).split()[0].upper()
                     break
@@ -555,7 +574,7 @@ elif menu == "💳 Kasa & Bakiyeler":
                 
                 guncelle_btn = st.form_submit_button("💾 Bilgileri Güncelle")
                 if guncelle_btn:
-                    execute_query("""
+                    turso_execute("""
                         UPDATE rezervasyonlar 
                         SET misafir_adi = ?, telefon = ?, tc_pasaport = ?, plaka = ?, toplam_ucret = ?, alinan_kapora = ?
                         WHERE id = ?
@@ -574,12 +593,12 @@ elif menu == "💳 Kasa & Bakiyeler":
             cikis_col, iptal_col = st.columns(2)
             with cikis_col:
                 if st.button("✅ Çıkış Yap (Arşive Al)", use_container_width=True):
-                    execute_query("UPDATE rezervasyonlar SET durum = 'Tamamlandı' WHERE id = ?", [secilen_islem_id])
+                    turso_execute("UPDATE rezervasyonlar SET durum = 'Tamamlandı' WHERE id = ?", [secilen_islem_id])
                     st.success("Çıkış yapıldı ve arşive kaldırıldı.")
                     st.rerun()
             with iptal_col:
                 if st.button("❌ Rezervasyonu İptal Et", use_container_width=True):
-                    execute_query("UPDATE rezervasyonlar SET durum = 'İptal Edildi' WHERE id = ?", [secilen_islem_id])
+                    turso_execute("UPDATE rezervasyonlar SET durum = 'İptal Edildi' WHERE id = ?", [secilen_islem_id])
                     st.warning("Rezervasyon iptal edildi, oda boşa çıkarıldı.")
                     st.rerun()
     else:
@@ -593,8 +612,8 @@ elif menu == "📉 Gider & Net Kâr":
     st.caption("Apartın giderlerini kaydedin, net kârınızı tek bakışta görün.")
 
     gider_df = query_df("SELECT * FROM giderler ORDER BY tarih DESC")
-    gelir_res = execute_query("SELECT SUM(toplam_ucret) FROM rezervasyonlar WHERE durum IN ('Aktif', 'Tamamlandı')")
-    toplam_gelir_val = float(gelir_res.rows[0][0]) if (gelir_res.rows and gelir_res.rows[0][0] is not None) else 0.0
+    _, gel_rows = turso_execute("SELECT SUM(toplam_ucret) FROM rezervasyonlar WHERE durum IN ('Aktif', 'Tamamlandı')")
+    toplam_gelir_val = float(gel_rows[0][0]) if (gel_rows and gel_rows[0][0] is not None) else 0.0
 
     toplam_gider = gider_df['tutar'].astype(float).sum() if not gider_df.empty else 0.0
     net_kar = toplam_gelir_val - toplam_gider
@@ -617,7 +636,7 @@ elif menu == "📉 Gider & Net Kâr":
 
             ekle_btn = st.form_submit_button("Gideri Kaydet", use_container_width=True)
             if ekle_btn and g_baslik.strip():
-                execute_query("INSERT INTO giderler (baslik, kategori, tutar, tarih) VALUES (?, ?, ?, ?)",
+                turso_execute("INSERT INTO giderler (baslik, kategori, tutar, tarih) VALUES (?, ?, ?, ?)",
                               [g_baslik.strip(), g_kat, g_tutar, g_tarih.strftime("%Y-%m-%d")])
                 st.success("Gider kaydedildi!")
                 st.rerun()
@@ -693,7 +712,7 @@ elif menu == "⚙️ Daire & Apart Ayarları":
         with col_ad2:
             st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
             if st.button("İsmi Kaydet", use_container_width=True):
-                execute_query("UPDATE ayarlar SET deger = ? WHERE anahtar = 'apart_adi'", [yeni_apart_adi.strip()])
+                turso_execute("UPDATE ayarlar SET deger = ? WHERE anahtar = 'apart_adi'", [yeni_apart_adi.strip()])
                 st.success("Apart ismi güncellendi!")
                 st.rerun()
 
@@ -701,9 +720,9 @@ elif menu == "⚙️ Daire & Apart Ayarları":
     st.markdown("#### 🏢 Mevcut Daireleri & Gecelik Fiyatları Düzenle")
     st.caption("Her dairenin ismini, katını, kapasitesini ve standart gecelik fiyatını düzenleyin:")
 
-    daire_res = execute_query("SELECT id, oda_adi, kat, kapasite, gecelik_fiyat FROM odalar ORDER BY id ASC")
+    _, daire_rows = turso_execute("SELECT id, oda_adi, kat, kapasite, gecelik_fiyat FROM odalar ORDER BY id ASC")
 
-    for d_id, d_adi, d_kat, d_kap, d_fiyat in daire_res.rows:
+    for d_id, d_adi, d_kat, d_kap, d_fiyat in daire_rows:
         with st.expander(f"🏠 {d_adi} ({d_kat} - {d_kap} Kişilik - {float(d_fiyat or 1500):,.0f} TL/gece)", expanded=False):
             with st.form(f"form_daire_{d_id}"):
                 c1, c2, c3, c4 = st.columns(4)
@@ -720,7 +739,7 @@ elif menu == "⚙️ Daire & Apart Ayarları":
 
                 kaydet_daire = st.form_submit_button("💾 Daireyi Güncelle")
                 if kaydet_daire:
-                    execute_query("UPDATE odalar SET oda_adi = ?, kat = ?, kapasite = ?, gecelik_fiyat = ? WHERE id = ?",
+                    turso_execute("UPDATE odalar SET oda_adi = ?, kat = ?, kapasite = ?, gecelik_fiyat = ? WHERE id = ?",
                                   [duz_ad.strip(), duz_kat, duz_kap, duz_fiyat, d_id])
                     st.success(f"{duz_ad} başarıyla güncellendi!")
                     st.rerun()
